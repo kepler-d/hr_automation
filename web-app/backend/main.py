@@ -388,6 +388,76 @@ def list_jobs(db: Session = Depends(get_db)):
     jobs = db.query(JobDescription).order_by(JobDescription.timestamp.desc()).all()
     return [{"id": j.id, "title": j.title, "description_text": j.description_text} for j in jobs]
 
+def query_ollama_ats(resume_text: str, job_description: str) -> dict:
+    prompt = f"""
+    You are an ATS (Applicant Tracking System). Compare this resume against the job description.
+    
+    Return ONLY a JSON with this structure:
+    {{
+      "ats_score": 0-100,
+      "matched_keywords": ["python", "docker", ...],
+      "missing_keywords": ["kubernetes", "aws", ...],
+      "match_summary": "one line explanation"
+    }}
+    
+    Job Description: {job_description}
+    Resume: {resume_text}
+    """
+    
+    url = f"{OLLAMA_API_URL}/api/generate"
+    payload = {
+        "model": "llama3",
+        "prompt": prompt,
+        "stream": False,
+        "format": "json"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, timeout=90)
+        response.raise_for_status()
+        result = response.json()
+        response_text = result.get("response", "").strip()
+        
+        match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        return json.loads(response_text)
+    except Exception as e:
+        return {
+            "ats_score": 0,
+            "matched_keywords": [],
+            "missing_keywords": [],
+            "match_summary": f"ATS evaluation error: {str(e)}"
+        }
+
+@app.post("/api/ats-check")
+def check_ats(
+    file: UploadFile = File(...),
+    job_description: str = Form(...),
+):
+    resume_text = extract_text_from_file(file)
+    if not resume_text.strip():
+        raise HTTPException(status_code=400, detail="Could not extract text from file.")
+        
+    result = query_ollama_ats(resume_text, job_description)
+    
+    # Normalize fields
+    try:
+        result["ats_score"] = int(result.get("ats_score", 0))
+    except Exception:
+        result["ats_score"] = 0
+        
+    if "matched_keywords" not in result or not isinstance(result["matched_keywords"], list):
+        result["matched_keywords"] = []
+        
+    if "missing_keywords" not in result or not isinstance(result["missing_keywords"], list):
+        result["missing_keywords"] = []
+        
+    if "match_summary" not in result:
+        result["match_summary"] = "No match summary generated."
+        
+    return result
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

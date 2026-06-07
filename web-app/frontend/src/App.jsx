@@ -33,6 +33,16 @@ function App() {
   const [savingJob, setSavingJob] = useState(false);
   const [jobMessage, setJobMessage] = useState(null);
   const [jobError, setJobError] = useState(null);
+
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('hr'); // 'hr' or 'ats'
+
+  // ATS Checker State (Candidate-facing Playground)
+  const [atsJD, setAtsJD] = useState('');
+  const [atsFile, setAtsFile] = useState(null);
+  const [atsChecking, setAtsChecking] = useState(false);
+  const [atsResult, setAtsResult] = useState(null);
+  const [atsError, setAtsError] = useState(null);
   
   // Fetch Candidates from API
   const fetchCandidates = async () => {
@@ -158,6 +168,45 @@ function App() {
     }
   };
 
+  // ATS Checker Form handler
+  const handleAtsCheckSubmit = async (e) => {
+    e.preventDefault();
+    if (!atsFile) {
+      setAtsError('Please select your resume file (PDF or TXT).');
+      return;
+    }
+    if (!atsJD.trim()) {
+      setAtsError('Please paste the Job Description requirements.');
+      return;
+    }
+    setAtsChecking(true);
+    setAtsError(null);
+    setAtsResult(null);
+
+    const formData = new FormData();
+    formData.append('file', atsFile);
+    formData.append('job_description', atsJD);
+
+    try {
+      const res = await fetch(`${API_URL}/api/ats-check`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Failed to analyze resume.');
+      }
+
+      const result = await res.json();
+      setAtsResult(result);
+    } catch (err) {
+      setAtsError(err.message);
+    } finally {
+      setAtsChecking(false);
+    }
+  };
+
   // Toggle Shortlist/Reject Status
   const handleStatusChange = async (candidateId, newStatus) => {
     try {
@@ -247,8 +296,36 @@ function App() {
         </div>
       </header>
 
-      {/* KPI Stats Ribbon */}
-      <section className="stats-grid">
+      {/* Navigation Tabs */}
+      <nav className="app-tabs">
+        <button 
+          className={`tab-btn ${activeTab === 'hr' ? 'active' : ''}`}
+          onClick={() => setActiveTab('hr')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          HR Control Center
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'ats' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ats')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          Candidate ATS Checker
+        </button>
+      </nav>
+
+      {activeTab === 'hr' && (
+        <>
+          {/* KPI Stats Ribbon */}
+          <section className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon logo-blue">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -577,6 +654,136 @@ function App() {
           )}
         </section>
       </main>
+      </>
+      )}
+
+      {activeTab === 'ats' && (
+        <main className="dashboard-main ats-playground-main">
+          {/* ATS Checker Form Card */}
+          <section className="form-section card ats-form-card">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              ATS Match Playground
+            </h2>
+            <form onSubmit={handleAtsCheckSubmit}>
+              <div className="form-group">
+                <label>Job Description Requirements</label>
+                <textarea 
+                  placeholder="Paste the Job Description requirements here..." 
+                  value={atsJD} 
+                  onChange={(e) => setAtsJD(e.target.value)} 
+                  required 
+                  rows="6"
+                  className="jd-textarea"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Upload Your Resume (PDF / TXT)</label>
+                <div className="file-drop-zone">
+                  <input 
+                    id="ats-file-input"
+                    type="file" 
+                    accept=".pdf,.txt"
+                    onChange={(e) => setAtsFile(e.target.files[0])}
+                    required
+                  />
+                  <div className="drop-zone-content">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span>{atsFile ? atsFile.name : "Drag & drop file or click to browse"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {atsError && <div className="alert danger">{atsError}</div>}
+
+              <button type="submit" className="btn-primary" disabled={atsChecking}>
+                {atsChecking ? (
+                  <>
+                    <span className="spinner"></span>
+                    Analyzing ATS Match...
+                  </>
+                ) : (
+                  "Calculate ATS Match Score"
+                )}
+              </button>
+            </form>
+          </section>
+
+          {/* ATS Results Card */}
+          <section className="table-section card ats-results-card">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              ATS Match Analysis
+            </h2>
+
+            {atsResult ? (
+              <div className="ats-results-wrapper">
+                <div className="ats-score-badge-container">
+                  <div className={`ats-score-ring ${atsResult.ats_score >= 80 ? 'good' : atsResult.ats_score >= 50 ? 'warning' : 'poor'}`}>
+                    <span className="ats-score-num">{atsResult.ats_score}</span>
+                    <span className="ats-score-label">Match Score</span>
+                  </div>
+                  <div className="ats-summary-container">
+                    <h3>Analysis Summary</h3>
+                    <p className="ats-summary-text">"{atsResult.match_summary}"</p>
+                  </div>
+                </div>
+
+                <div className="ats-keywords-grid">
+                  <div className="keywords-block">
+                    <h4>Matched Keywords ({atsResult.matched_keywords.length})</h4>
+                    {atsResult.matched_keywords.length > 0 ? (
+                      <div className="keywords-tags">
+                        {atsResult.matched_keywords.map((kw, i) => (
+                          <span key={i} className="kw-tag kw-matched">{kw}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="no-keywords">No matched keywords found.</p>
+                    )}
+                  </div>
+
+                  <div className="keywords-block">
+                    <h4>Missing Keywords ({atsResult.missing_keywords.length})</h4>
+                    {atsResult.missing_keywords.length > 0 ? (
+                      <div className="keywords-tags">
+                        {atsResult.missing_keywords.map((kw, i) => (
+                          <span key={i} className="kw-tag kw-missing">{kw}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="no-keywords">No missing keywords identified.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="ats-empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                <p>Upload your resume and paste a job description on the left to calculate your real-time ATS match analysis.</p>
+              </div>
+            )}
+          </section>
+        </main>
+      )}
 
       {/* Candidate Details Modal/Drawer */}
       {selectedCandidate && (

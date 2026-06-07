@@ -81,6 +81,22 @@
             {
               "name": "missing_skills",
               "value": "={{ JSON.stringify(JSON.parse($json.stdout).missing_skills) }}"
+            },
+            {
+              "name": "ats_score",
+              "value": "={{ JSON.parse($json.stdout).ats_score }}"
+            },
+            {
+              "name": "matched_keywords",
+              "value": "={{ JSON.stringify(JSON.parse($json.stdout).matched_keywords) }}"
+            },
+            {
+              "name": "missing_keywords",
+              "value": "={{ JSON.stringify(JSON.parse($json.stdout).missing_keywords) }}"
+            },
+            {
+              "name": "match_summary",
+              "value": "={{ JSON.parse($json.stdout).match_summary }}"
             }
           ]
         },
@@ -172,6 +188,10 @@
             "Reason": "={{ $json.reason }}",
             "Skills Matched": "={{ $json.skills_matched }}",
             "Missing Skills": "={{ $json.missing_skills }}",
+            "ATS Score": "={{ $json.ats_score }}",
+            "Matched Keywords": "={{ $json.matched_keywords }}",
+            "Missing Keywords": "={{ $json.missing_keywords }}",
+            "Match Summary": "={{ $json.match_summary }}",
             "Status": "={{ Number($json.score) >= 65 ? 'Shortlisted' : 'Rejected' }}",
             "Meeting Link": "={{ $json.meeting_link || '' }}",
             "Meet Link": "={{ $json.meet_link || '' }}"

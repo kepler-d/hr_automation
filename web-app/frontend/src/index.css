@@ -957,3 +957,227 @@ button {
     gap: 16px;
   }
 }
+
+/* Navigation Tabs Styling */
+.app-tabs {
+  display: flex;
+  gap: 12px;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-light);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  transition: var(--transition);
+}
+
+.tab-btn:hover {
+  color: var(--primary-color);
+  background-color: transparent;
+}
+
+.tab-btn.active {
+  color: var(--secondary-color);
+  border-bottom-color: var(--secondary-color);
+}
+
+/* ATS Results Styles */
+.ats-results-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 10px;
+}
+
+.ats-score-badge-container {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 20px;
+}
+
+.ats-score-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 6px solid transparent;
+}
+
+.ats-score-ring.good {
+  border-color: var(--success-color);
+  background-color: var(--success-bg);
+  color: var(--success-color);
+}
+
+.ats-score-ring.warning {
+  border-color: var(--warning-color);
+  background-color: var(--warning-bg);
+  color: var(--warning-color);
+}
+
+.ats-score-ring.poor {
+  border-color: var(--danger-color);
+  background-color: var(--danger-bg);
+  color: var(--danger-color);
+}
+
+.ats-score-num {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ats-score-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.ats-summary-container {
+  flex: 1;
+}
+
+.ats-summary-container h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ats-summary-text {
+  font-size: 14px;
+  color: var(--text-dark);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.ats-keywords-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .ats-keywords-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.keywords-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keywords-block h4 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-light);
+  letter-spacing: 0.5px;
+}
+
+.keywords-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background-color: rgba(247, 250, 252, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  min-height: 80px;
+  align-content: flex-start;
+}
+
+.kw-tag {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kw-tag.kw-matched {
+  background-color: var(--success-bg);
+  color: var(--success-color);
+  border: 1px solid rgba(72, 187, 120, 0.2);
+}
+
+.kw-tag.kw-missing {
+  background-color: var(--danger-bg);
+  color: var(--danger-color);
+  border: 1px solid rgba(229, 62, 98, 0.2);
+}
+
+.no-keywords {
+  font-size: 13px;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+.ats-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+  color: var(--text-light);
+  text-align: center;
+  background-color: rgba(247, 250, 252, 0.3);
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  height: 100%;
+  min-height: 280px;
+}
+
+.ats-empty-state svg {
+  color: var(--text-light);
+}
+
+.ats-empty-state p {
+  font-size: 14px;
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .app-tabs {
+    flex-direction: row;
+    justify-content: space-around;
+  }
+  
+  .tab-btn {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  
+  .ats-score-badge-container {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    gap: 16px;
+  }
+}

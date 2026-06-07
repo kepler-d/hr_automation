@@ -10,6 +10,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pypdf import PdfReader
+from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -39,6 +40,14 @@ except Exception:
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+class JobDescription(Base):
+    __tablename__ = "dashboard_jds"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    description_text = Column(Text)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
 class Candidate(Base):
     __tablename__ = "dashboard_candidates"
     
@@ -47,6 +56,7 @@ class Candidate(Base):
     email = Column(String, index=True)
     phone = Column(String, nullable=True)
     job_role = Column(String, index=True)
+    job_description_id = Column(Integer, nullable=True) # Linked job description id
     resume_text = Column(Text)
     score = Column(Integer)
     reason = Column(Text)
@@ -111,8 +121,10 @@ def extract_text_from_file(file: UploadFile) -> str:
         )
 
 # Helper: Screen resume using Llama 3 on Ollama
-def query_ollama_screener(job_role: str, resume_text: str) -> dict:
-    prompt = f"""You are an expert HR recruiter. Evaluate this resume for the role of {job_role}.
+def query_ollama_screener(job_role: str, resume_text: str, job_description: Optional[str] = None) -> dict:
+    jd_clause = f"\nJob Description Requirements:\n{job_description}\n" if job_description else ""
+    
+    prompt = f"""You are an expert HR recruiter. Evaluate this resume for the role of {job_role}.{jd_clause}
 Score the candidate from 0 to 100 based on:
 - Skills match (40 points)
 - Years of relevant experience (30 points)
@@ -184,6 +196,7 @@ def list_candidates(db: Session = Depends(get_db)):
             "email": c.email,
             "phone": c.phone,
             "job_role": c.job_role,
+            "job_description_id": c.job_description_id,
             "resume_text": c.resume_text,
             "score": c.score,
             "reason": c.reason,
@@ -203,6 +216,7 @@ def upload_candidate(
     name: str = Form(...),
     email: str = Form(...),
     phone: Optional[str] = Form(None),
+    job_description_id: Optional[int] = Form(None),
     db: Session = Depends(get_db)
 ):
     # 1. Parse text from file
@@ -210,8 +224,17 @@ def upload_candidate(
     if not resume_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from file.")
         
+    # Get Job Description text if present
+    job_description_text = None
+    if job_description_id is not None:
+        job_desc = db.query(JobDescription).filter(JobDescription.id == job_description_id).first()
+        if job_desc:
+            job_description_text = job_desc.description_text
+            # Overwrite job_role with the saved job posting title
+            job_role = job_desc.title
+            
     # 2. Run AI Screener
-    ai_result = query_ollama_screener(job_role, resume_text)
+    ai_result = query_ollama_screener(job_role, resume_text, job_description_text)
     
     # Safely convert score to integer
     try:
@@ -240,6 +263,7 @@ def upload_candidate(
         email=email,
         phone=phone,
         job_role=job_role,
+        job_description_id=job_description_id,
         resume_text=resume_text,
         score=score,
         reason=ai_result.get("reason", ""),
@@ -343,6 +367,26 @@ def export_report(db: Session = Depends(get_db)):
                 os.remove(temp_json_path)
             except Exception:
                 pass
+
+class JobDescriptionCreate(BaseModel):
+    title: str
+    description_text: str
+
+@app.post("/api/jobs")
+def create_job(job_in: JobDescriptionCreate, db: Session = Depends(get_db)):
+    job_desc = JobDescription(
+        title=job_in.title,
+        description_text=job_in.description_text
+    )
+    db.add(job_desc)
+    db.commit()
+    db.refresh(job_desc)
+    return {"id": job_desc.id, "title": job_desc.title}
+
+@app.get("/api/jobs")
+def list_jobs(db: Session = Depends(get_db)):
+    jobs = db.query(JobDescription).order_by(JobDescription.timestamp.desc()).all()
+    return [{"id": j.id, "title": j.title, "description_text": j.description_text} for j in jobs]
 
 if __name__ == "__main__":
     import uvicorn

@@ -12,7 +12,7 @@ function App() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [jobRole, setJobRole] = useState('Software Engineer');
+  const [jobRole, setJobRole] = useState('');
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState(null);
@@ -24,6 +24,15 @@ function App() {
   
   // Selected Candidate Drawer
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+
+  // Job Descriptions State
+  const [jobs, setJobs] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobDescText, setJobDescText] = useState('');
+  const [savingJob, setSavingJob] = useState(false);
+  const [jobMessage, setJobMessage] = useState(null);
+  const [jobError, setJobError] = useState(null);
   
   // Fetch Candidates from API
   const fetchCandidates = async () => {
@@ -41,13 +50,30 @@ function App() {
     }
   };
 
+  // Fetch Job Descriptions from API
+  const fetchJobs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/jobs`);
+      if (!res.ok) throw new Error('Failed to fetch job descriptions.');
+      const data = await res.json();
+      setJobs(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchCandidates();
+    fetchJobs();
   }, []);
 
   // Handle File Upload & Screen
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
+    if (!jobRole.trim()) {
+      setUploadError('Please specify a Job Role Target.');
+      return;
+    }
     if (!file) {
       setUploadError('Please select a resume file (PDF or TXT).');
       return;
@@ -63,6 +89,9 @@ function App() {
     formData.append('email', email);
     formData.append('phone', phone);
     formData.append('job_role', jobRole);
+    if (selectedJobId) {
+      formData.append('job_description_id', selectedJobId);
+    }
     
     try {
       const res = await fetch(`${API_URL}/api/upload`, {
@@ -92,6 +121,40 @@ function App() {
       setUploadError(err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  // Create Job Description handler
+  const handleCreateJob = async (e) => {
+    e.preventDefault();
+    if (!jobTitle.trim() || !jobDescText.trim()) {
+      setJobError('Please fill in both the Job Title and Job Description.');
+      return;
+    }
+    setSavingJob(true);
+    setJobError(null);
+    setJobMessage(null);
+    try {
+      const res = await fetch(`${API_URL}/api/jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: jobTitle,
+          description_text: jobDescText,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create job description.');
+      const data = await res.json();
+      setJobMessage(`Job "${data.title}" created successfully!`);
+      setJobTitle('');
+      setJobDescText('');
+      fetchJobs();
+    } catch (err) {
+      setJobError(err.message);
+    } finally {
+      setSavingJob(false);
     }
   };
 
@@ -145,6 +208,8 @@ function App() {
   const averageScore = totalCount > 0 
     ? (candidates.reduce((sum, c) => sum + c.score, 0) / totalCount).toFixed(1) 
     : '0.0';
+
+  const linkedJob = selectedCandidate && jobs.find(j => j.id === selectedCandidate.job_description_id);
 
   // Role list for filters
   const roles = ['All', ...new Set(candidates.map(c => c.job_role))];
@@ -226,99 +291,197 @@ function App() {
 
       {/* Main Grid: Upload Forms + Candidates List */}
       <main className="dashboard-main">
-        
-        {/* Upload Form Block */}
-        <section className="form-section card">
-          <h2>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <polyline points="9 15 12 12 15 15" />
-            </svg>
-            Screen New Candidate
-          </h2>
-          <form onSubmit={handleUploadSubmit}>
-            <div className="form-group">
-              <label>Full Name</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Alice Smith" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
-              />
-            </div>
-            
-            <div className="form-group-row">
+        <div className="sidebar-column">
+          {/* Upload Form Block */}
+          <section className="form-section card">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="18" x2="12" y2="12" />
+                <polyline points="9 15 12 12 15 15" />
+              </svg>
+              Screen New Candidate
+            </h2>
+            <form onSubmit={handleUploadSubmit}>
               <div className="form-group">
-                <label>Email Address</label>
+                <label>Full Name</label>
                 <input 
-                  type="email" 
-                  placeholder="e.g. alice@example.com" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
+                  type="text" 
+                  placeholder="e.g. Alice Smith" 
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)} 
                   required 
                 />
               </div>
-              <div className="form-group">
-                <label>Phone Number (Optional)</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. +1234567890" 
-                  value={phone} 
-                  onChange={(e) => setPhone(e.target.value)} 
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Job Role Target</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Software Engineer" 
-                value={jobRole} 
-                onChange={(e) => setJobRole(e.target.value)} 
-                required 
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Upload Resume File (PDF / TXT)</label>
-              <div className="file-drop-zone">
-                <input 
-                  id="file-input"
-                  type="file" 
-                  accept=".pdf,.txt"
-                  onChange={(e) => setFile(e.target.files[0])}
-                  required
-                />
-                <div className="drop-zone-content">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                  <span>{file ? file.name : "Drag & drop file or click to browse"}</span>
+              
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input 
+                    type="email" 
+                    placeholder="e.g. alice@example.com" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Phone Number (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. +1234567890" 
+                    value={phone} 
+                    onChange={(e) => setPhone(e.target.value)} 
+                  />
                 </div>
               </div>
-            </div>
 
-            {uploadMessage && <div className="alert success">{uploadMessage}</div>}
-            {uploadError && <div className="alert danger">{uploadError}</div>}
+              <div className="form-group">
+                <label>Target Job Description (Optional)</label>
+                <select
+                  value={selectedJobId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedJobId(id);
+                    if (id) {
+                      const selected = jobs.find(j => j.id === parseInt(id));
+                      if (selected) {
+                        setJobRole(selected.title);
+                      }
+                    } else {
+                      setJobRole('');
+                    }
+                  }}
+                >
+                  <option value="">-- None (Generic Target Role) --</option>
+                  {jobs.map(j => (
+                    <option key={j.id} value={j.id}>{j.title}</option>
+                  ))}
+                </select>
+              </div>
 
-            <button type="submit" className="btn-primary" disabled={uploading}>
-              {uploading ? (
-                <>
-                  <span className="spinner"></span>
-                  Processing with AI...
-                </>
+              <div className="form-group">
+                <label>Job Role Target</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Software Engineer" 
+                  value={jobRole} 
+                  onChange={(e) => setJobRole(e.target.value)} 
+                  required 
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Upload Resume File (PDF / TXT)</label>
+                <div className="file-drop-zone">
+                  <input 
+                    id="file-input"
+                    type="file" 
+                    accept=".pdf,.txt"
+                    onChange={(e) => setFile(e.target.files[0])}
+                    required
+                  />
+                  <div className="drop-zone-content">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span>{file ? file.name : "Drag & drop file or click to browse"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {uploadMessage && <div className="alert success">{uploadMessage}</div>}
+              {uploadError && <div className="alert danger">{uploadError}</div>}
+
+              <button type="submit" className="btn-primary" disabled={uploading}>
+                {uploading ? (
+                  <>
+                    <span className="spinner"></span>
+                    Processing with AI...
+                  </>
+                ) : (
+                  "Upload and Run Screener"
+                )}
+              </button>
+            </form>
+          </section>
+
+          {/* Job Description Manager Block */}
+          <section className="form-section card jd-manager-card">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              Manage Job Openings
+            </h2>
+            
+            <form onSubmit={handleCreateJob}>
+              <div className="form-group">
+                <label>Job Title</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Senior Frontend Developer" 
+                  value={jobTitle} 
+                  onChange={(e) => setJobTitle(e.target.value)} 
+                  required 
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Job Description & Requirements</label>
+                <textarea 
+                  placeholder="Paste the job description details, key skills, and experience requirements here..." 
+                  value={jobDescText} 
+                  onChange={(e) => setJobDescText(e.target.value)} 
+                  required 
+                  rows="4"
+                  className="jd-textarea"
+                />
+              </div>
+
+              {jobMessage && <div className="alert success">{jobMessage}</div>}
+              {jobError && <div className="alert danger">{jobError}</div>}
+
+              <button type="submit" className="btn-primary" disabled={savingJob}>
+                {savingJob ? (
+                  <>
+                    <span className="spinner"></span>
+                    Saving Job...
+                  </>
+                ) : (
+                  "Save Job Description"
+                )}
+              </button>
+            </form>
+
+            <div className="jd-list-section">
+              <h3>Active Job Openings ({jobs.length})</h3>
+              {jobs.length === 0 ? (
+                <p className="no-jds-text">No job openings created yet.</p>
               ) : (
-                "Upload and Run Screener"
+                <div className="jd-list">
+                  {jobs.map(j => (
+                    <div key={j.id} className="jd-list-item">
+                      <div className="jd-item-header">
+                        <strong>{j.title}</strong>
+                        <span className="jd-id-tag">ID: {j.id}</span>
+                      </div>
+                      <p className="jd-item-snippet">
+                        {j.description_text.length > 80 
+                          ? `${j.description_text.substring(0, 80)}...` 
+                          : j.description_text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               )}
-            </button>
-          </form>
-        </section>
+            </div>
+          </section>
+        </div>
 
         {/* Datagrid Candidate Table */}
         <section className="table-section card">
@@ -434,6 +597,16 @@ function App() {
                   <span><strong>Screened:</strong> {new Date(selectedCandidate.timestamp).toLocaleDateString()}</span>
                 </div>
               </div>
+
+              {linkedJob && (
+                <div className="details-section job-spec-section">
+                  <h4>Target Job Description</h4>
+                  <div className="job-spec-details">
+                    <h5>{linkedJob.title}</h5>
+                    <p className="job-spec-text">{linkedJob.description_text}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="score-section">
                 <div className="score-main">

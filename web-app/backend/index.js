@@ -11,6 +11,7 @@ const { spawn } = require('child_process');
 const { getDb } = require('./db');
 const pdfImgConvert = require('pdf-img-convert');
 const Tesseract = require('tesseract.js');
+const PDFDocument = require('pdfkit-table');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -350,9 +351,6 @@ app.post('/api/candidates/:id/meeting', async (req, res) => {
 
 // Route: Export Report
 app.post('/api/report', async (req, res) => {
-  let tempJsonPath = null;
-  let outputPdf = null;
-
   try {
     const db = await getDb();
     const candidates = await db('dashboard_candidates');
@@ -360,66 +358,96 @@ app.post('/api/report', async (req, res) => {
       return res.status(404).json({ detail: 'No candidates found to generate report' });
     }
 
-    // Format candidates list
-    const candList = candidates.map(c => {
-      let skillsMatched = [];
-      try {
-        skillsMatched = c.skills_matched ? JSON.parse(c.skills_matched) : [];
-      } catch (e) {
-        skillsMatched = [];
+    // Prepare Document
+    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+
+    // Set Response Headers to download
+    res.setHeader('Content-disposition', 'attachment; filename="weekly_candidates_report.pdf"');
+    res.setHeader('Content-type', 'application/pdf');
+
+    // Pipe PDF to response
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(20).font('Helvetica-Bold').fillColor('#1A365D').text('AI-Powered HR Automation Report', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').fillColor('#718096').text(`Generated on ${new Date().toLocaleString()} | Weekly Summary & Candidate Analysis`, { align: 'center' });
+    doc.moveDown(2);
+
+    // KPI Summary
+    const totalApplicants = candidates.length;
+    const shortlistedCount = candidates.filter(c => c.status === 'Shortlisted' || c.score >= 65).length;
+    const avgScore = totalApplicants > 0 ? (candidates.reduce((sum, c) => sum + (parseInt(c.score) || 0), 0) / totalApplicants) : 0;
+    const shortlistPct = totalApplicants > 0 ? ((shortlistedCount / totalApplicants) * 100) : 0;
+
+    const kpiTable = {
+      title: "Key Performance Indicators",
+      headers: ["Total Applicants", "Shortlist Rate", "Avg Screening Score"],
+      rows: [
+        [totalApplicants.toString(), `${shortlistPct.toFixed(1)}%`, avgScore.toFixed(1)]
+      ]
+    };
+    await doc.table(kpiTable, { width: 500, align: 'center' });
+    doc.moveDown(2);
+
+    // Top Candidates Table
+    const topCandidates = [...candidates].sort((a, b) => (parseInt(b.score) || 0) - (parseInt(a.score) || 0)).slice(0, 5);
+    const candRows = topCandidates.map(c => [
+      c.name || 'Unknown',
+      c.job_role || 'N/A',
+      (c.score || 0).toString(),
+      (c.reason || 'No evaluation provided.').substring(0, 115) + '...'
+    ]);
+
+    const candTable = {
+      title: "Top 5 Evaluated Candidates",
+      headers: ["Name", "Job Role", "Score", "Screening Reason Summary"],
+      rows: candRows
+    };
+    await doc.table(candTable, { width: 500 });
+    doc.moveDown(2);
+
+    // Skills breakdown
+    const skillsFreq = {};
+    candidates.forEach(c => {
+      let skills = [];
+      if (c.skills_matched) {
+        try {
+          let parsed = JSON.parse(c.skills_matched);
+          skills = Array.isArray(parsed) ? parsed : [];
+        } catch(e) {
+          skills = typeof c.skills_matched === 'string' ? c.skills_matched.split(',').map(s => s.trim()) : [];
+        }
       }
-      return {
-        name: c.name,
-        email: c.email,
-        job_role: c.job_role,
-        score: c.score,
-        status: c.status,
-        reason: c.reason,
-        skills_matched: skillsMatched
-      };
+      skills.forEach(s => {
+        if (!s) return;
+        const skill = s.trim().toUpperCase();
+        if (skill) {
+          skillsFreq[skill] = (skillsFreq[skill] || 0) + 1;
+        }
+      });
     });
 
-    // Write to temp JSON file
-    const uniqueId = Math.random().toString(36).substring(2, 15);
-    const tempJsonFilename = `candidates_report_${uniqueId}.json`;
-    tempJsonPath = path.join(os.tmpdir(), tempJsonFilename);
-    fs.writeFileSync(tempJsonPath, JSON.stringify(candList));
+    const sortedSkills = Object.entries(skillsFreq).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const skillsRows = sortedSkills.map(([skill, count]) => [
+      skill,
+      count.toString(),
+      ((count / totalApplicants) * 100).toFixed(1) + '%'
+    ]);
 
-    // Resolve generate_report.py path dynamically
-    let pythonScript = '/data/python/generate_report.py';
-    if (!fs.existsSync(pythonScript)) {
-      pythonScript = path.resolve(__dirname, '..', '..', 'python', 'generate_report.py');
-    }
+    const skillsTable = {
+      title: "Commonly Identified Skills (Top 10)",
+      headers: ["Skill Tag", "Matched Count", "Percentage of Candidates"],
+      rows: skillsRows
+    };
+    await doc.table(skillsTable, { width: 500 });
 
-    const tempPdfFilename = `weekly_report_dashboard_${uniqueId}.pdf`;
-    outputPdf = path.join(os.tmpdir(), tempPdfFilename);
+    doc.end();
 
-    // Inside the container, standard python executable is at /opt/venv/bin/python or python3.
-    // If not in virtual environment, fallback to standard python3.
-    let pythonExecutable = 'python3';
-    if (fs.existsSync('/opt/venv/bin/python3')) {
-      pythonExecutable = '/opt/venv/bin/python3';
-    } else if (fs.existsSync('/opt/venv/bin/python')) {
-      pythonExecutable = '/opt/venv/bin/python';
-    }
-
-    await runSubprocess(pythonExecutable, [pythonScript, tempJsonPath, outputPdf]);
-
-    res.download(outputPdf, 'weekly_candidates_report.pdf', (err) => {
-      // Cleanup temp files
-      try { fs.unlinkSync(tempJsonPath); } catch (_) { }
-      try { fs.unlinkSync(outputPdf); } catch (_) { }
-    });
   } catch (err) {
     console.error('Error generating report:', err);
-    // Cleanup temp files on error
-    if (tempJsonPath && fs.existsSync(tempJsonPath)) {
-      try { fs.unlinkSync(tempJsonPath); } catch (_) { }
+    if (!res.headersSent) {
+      res.status(500).json({ detail: `PDF generation failed: ${err.message}` });
     }
-    if (outputPdf && fs.existsSync(outputPdf)) {
-      try { fs.unlinkSync(outputPdf); } catch (_) { }
-    }
-    res.status(500).json({ detail: `PDF generation failed: ${err.message}` });
   }
 });
 

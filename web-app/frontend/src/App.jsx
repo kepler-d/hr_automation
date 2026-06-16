@@ -1,23 +1,19 @@
 import React, { useState, useEffect } from 'react';
 
-// Backend API URL configuration (relying on host routing or fallback)
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function App() {
-  // Navigation active tab: 'dashboard', 'applicants', 'jobs', 'scheduler', 'analytics', 'ats', 'settings'
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Data State
   const [candidates, setCandidates] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Settings (Stored in localStorage)
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('talentflow_settings');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* use default */ }
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return {
       threshold: 65,
@@ -31,47 +27,37 @@ function App() {
     localStorage.setItem('talentflow_settings', JSON.stringify(settings));
   }, [settings]);
 
-  // Form State - Screen Candidate
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [jobRole, setJobRole] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [selectedJobId, setSelectedJobId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   
-  // Form State - Create Job Opening
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescText, setJobDescText] = useState('');
   const [savingJob, setSavingJob] = useState(false);
   const [jobMessage, setJobMessage] = useState(null);
   const [jobError, setJobError] = useState(null);
   
-  // Form State - Schedule Meeting
   const [schedulingCandidateId, setSchedulingCandidateId] = useState(null);
   const [meetLink, setMeetLink] = useState('');
   const [calendarLink, setCalendarLink] = useState('');
   const [scheduling, setScheduling] = useState(false);
 
-  // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   
-  // Selected Candidate Drawer
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
-  // ATS Checker Page State
   const [atsJD, setAtsJD] = useState('');
   const [atsFile, setAtsFile] = useState(null);
   const [atsChecking, setAtsChecking] = useState(false);
   const [atsResult, setAtsResult] = useState(null);
   const [atsError, setAtsError] = useState(null);
   
-  // Fetch Candidates from API
   const fetchCandidates = async () => {
     try {
       setLoading(true);
@@ -87,7 +73,6 @@ function App() {
     }
   };
 
-  // Fetch Job Descriptions from API
   const fetchJobs = async () => {
     try {
       const res = await fetch(`${API_URL}/api/jobs`);
@@ -104,101 +89,83 @@ function App() {
     fetchJobs();
   }, []);
 
-  // Handle File Upload & Screen Candidate
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    if (!jobRole.trim()) {
-      setUploadError('Please specify a Job Role Target.');
-      return;
-    }
-    if (!file) {
-      setUploadError('Please select a resume file (PDF or TXT).');
-      return;
-    }
+    if (!jobRole.trim()) { setUploadError('Please specify a Job Role Target.'); return; }
+    if (!files || files.length === 0) { setUploadError('Please select at least one resume file.'); return; }
     
     setUploading(true);
     setUploadError(null);
     setUploadMessage(null);
     
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('name', name);
-    formData.append('email', email);
-    formData.append('phone', phone);
-    formData.append('job_role', jobRole);
-    formData.append('threshold', settings.threshold);
-    if (selectedJobId) {
-      formData.append('job_description_id', selectedJobId);
+    let successCount = 0;
+    
+    for (let i = 0; i < files.length; i++) {
+      setUploadMessage(`Analyzing resume ${i + 1} of ${files.length}...`);
+      
+      const formData = new FormData();
+      formData.append('files', files[i]);
+      formData.append('job_role', jobRole);
+      formData.append('threshold', settings.threshold);
+      if (selectedJobId) { formData.append('job_description_id', selectedJobId); }
+      
+      try {
+        const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: formData });
+        if (res.ok) {
+          successCount++;
+          fetchCandidates(); // Refresh list after each candidate finishes
+        } else {
+          console.error(`Failed to process file ${files[i].name}`);
+        }
+      } catch (err) {
+        console.error(`Network error for file ${files[i].name}:`, err);
+      }
     }
     
+    setUploadMessage(`Finished! Processed ${successCount} out of ${files.length} resume(s).`);
+    setUploading(false);
+    
+    setFiles([]); setSelectedJobId('');
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) fileInput.value = '';
+    
+    setTimeout(() => { setShowUploadModal(false); setUploadMessage(null); }, 3000);
+  };
+
+  const handleDeleteCandidate = async (id, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm("Are you sure you want to permanently delete this candidate?")) return;
+    
     try {
-      const res = await fetch(`${API_URL}/api/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      
+      const res = await fetch(`${API_URL}/api/candidates/${id}`, { method: 'DELETE' });
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Failed to process resume.');
+        throw new Error('Failed to delete candidate.');
       }
       
-      const result = await res.json();
-      setUploadMessage(`Success! ${name} screened with a score of ${result.score}/100. Status: ${result.status}`);
-      
-      // Reset Form fields
-      setName('');
-      setEmail('');
-      setPhone('');
-      setFile(null);
-      setSelectedJobId('');
-      
-      // Reset file input element
-      const fileInput = document.getElementById('file-input');
-      if (fileInput) fileInput.value = '';
-      
-      // Refresh list
-      fetchCandidates();
-      
-      // Close modal after 1.5s success message display
-      setTimeout(() => {
-        setShowUploadModal(false);
-        setUploadMessage(null);
-      }, 1500);
+      setCandidates(prev => prev.filter(c => c.id !== id));
+      if (selectedCandidate && selectedCandidate.id === id) {
+        setSelectedCandidate(null);
+      }
     } catch (err) {
-      setUploadError(err.message);
-    } finally {
-      setUploading(false);
+      alert("Error deleting candidate: " + err.message);
     }
   };
 
-  // Create Job Description handler
   const handleCreateJob = async (e) => {
     e.preventDefault();
-    if (!jobTitle.trim() || !jobDescText.trim()) {
-      setJobError('Please fill in both the Job Title and Job Description.');
-      return;
-    }
-    setSavingJob(true);
-    setJobError(null);
-    setJobMessage(null);
+    if (!jobTitle.trim() || !jobDescText.trim()) { setJobError('Please fill in both fields.'); return; }
+    setSavingJob(true); setJobError(null); setJobMessage(null);
     try {
       const res = await fetch(`${API_URL}/api/jobs`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: jobTitle,
-          description_text: jobDescText,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: jobTitle, description_text: jobDescText }),
       });
       if (!res.ok) throw new Error('Failed to create job description.');
       const data = await res.json();
       setJobMessage(`Job "${data.title}" created successfully!`);
-      setJobTitle('');
-      setJobDescText('');
+      setJobTitle(''); setJobDescText('');
       fetchJobs();
-      
       setTimeout(() => setJobMessage(null), 3000);
     } catch (err) {
       setJobError(err.message);
@@ -207,36 +174,23 @@ function App() {
     }
   };
 
-  // Schedule Meeting handler
   const handleScheduleMeetingSubmit = async (e) => {
     e.preventDefault();
     if (!schedulingCandidateId) return;
-    
     setScheduling(true);
     try {
       const formData = new FormData();
       formData.append('meet_link', meetLink);
       formData.append('meeting_link', calendarLink);
 
-      const res = await fetch(`${API_URL}/api/candidates/${schedulingCandidateId}/meeting`, {
-        method: 'POST',
-        body: formData,
-      });
-      
+      const res = await fetch(`${API_URL}/api/candidates/${schedulingCandidateId}/meeting`, { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Failed to save interview schedules.');
       
-      // Update local candidates state
-      setCandidates(prev => prev.map(c => 
-        c.id === schedulingCandidateId ? { ...c, meet_link: meetLink, meeting_link: calendarLink } : c
-      ));
-      
+      setCandidates(prev => prev.map(c => c.id === schedulingCandidateId ? { ...c, meet_link: meetLink, meeting_link: calendarLink } : c));
       if (selectedCandidate && selectedCandidate.id === schedulingCandidateId) {
         setSelectedCandidate(prev => ({ ...prev, meet_link: meetLink, meeting_link: calendarLink }));
       }
-      
-      setSchedulingCandidateId(null);
-      setMeetLink('');
-      setCalendarLink('');
+      setSchedulingCandidateId(null); setMeetLink(''); setCalendarLink('');
       alert('Interview meeting links saved successfully!');
     } catch (err) {
       alert(err.message);
@@ -245,36 +199,22 @@ function App() {
     }
   };
 
-  // ATS Checker Form handler
   const handleAtsCheckSubmit = async (e) => {
     e.preventDefault();
-    if (!atsFile) {
-      setAtsError('Please select your resume file (PDF or TXT).');
-      return;
-    }
-    if (!atsJD.trim()) {
-      setAtsError('Please paste the Job Description requirements.');
-      return;
-    }
-    setAtsChecking(true);
-    setAtsError(null);
-    setAtsResult(null);
+    if (!atsFile) { setAtsError('Please select your resume file.'); return; }
+    if (!atsJD.trim()) { setAtsError('Please paste the Job Description.'); return; }
+    setAtsChecking(true); setAtsError(null); setAtsResult(null);
 
     const formData = new FormData();
     formData.append('file', atsFile);
     formData.append('job_description', atsJD);
 
     try {
-      const res = await fetch(`${API_URL}/api/ats-check`, {
-        method: 'POST',
-        body: formData,
-      });
-
+      const res = await fetch(`${API_URL}/api/ats-check`, { method: 'POST', body: formData });
       if (!res.ok) {
         const errData = await res.json();
         throw new Error(errData.detail || 'Failed to analyze resume.');
       }
-
       const result = await res.json();
       setAtsResult(result);
     } catch (err) {
@@ -284,22 +224,13 @@ function App() {
     }
   };
 
-  // Toggle Shortlist/Reject Status
   const handleStatusChange = async (candidateId, newStatus) => {
     try {
       const formData = new FormData();
       formData.append('status', newStatus);
-      
-      const res = await fetch(`${API_URL}/api/candidates/${candidateId}/status`, {
-        method: 'POST',
-        body: formData,
-      });
-      
+      const res = await fetch(`${API_URL}/api/candidates/${candidateId}/status`, { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Failed to update status.');
-      
-      // Update local state
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: newStatus } : c));
-      
       if (selectedCandidate && selectedCandidate.id === candidateId) {
         setSelectedCandidate(prev => ({ ...prev, status: newStatus }));
       }
@@ -308,12 +239,10 @@ function App() {
     }
   };
 
-  // Trigger Weekly Report PDF Download
   const handleDownloadReport = async () => {
     try {
       const res = await fetch(`${API_URL}/api/report`, { method: 'POST' });
       if (!res.ok) throw new Error('No candidate data available to compile report.');
-      
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -327,19 +256,14 @@ function App() {
     }
   };
 
-  // Global calculations for KPIs
   const totalCount = candidates.length;
   const shortlistCount = candidates.filter(c => c.status === 'Shortlisted').length;
   const shortlistPct = totalCount > 0 ? ((shortlistCount / totalCount) * 100).toFixed(1) : '0.0';
-  const averageScore = totalCount > 0 
-    ? (candidates.reduce((sum, c) => sum + c.score, 0) / totalCount).toFixed(1) 
-    : '0.0';
+  const averageScore = totalCount > 0 ? (candidates.reduce((sum, c) => sum + c.score, 0) / totalCount).toFixed(1) : '0.0';
   const activeJobsCount = jobs.length;
 
-  // Filter candidates list
   const filteredCandidates = candidates.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          c.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'All' || c.job_role === roleFilter;
     const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
     return matchesSearch && matchesRole && matchesStatus;
@@ -347,11 +271,9 @@ function App() {
 
   const rolesList = ['All', ...new Set(candidates.map(c => c.job_role))];
 
-  // Helper: Get Candidate counts by day of the week for chart
   const getWeeklyApplicationStats = () => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const counts = [0, 0, 0, 0, 0, 0, 0];
-    
     candidates.forEach(c => {
       const date = new Date(c.timestamp);
       if (!isNaN(date.getTime())) {
@@ -359,1179 +281,586 @@ function App() {
         counts[dayIdx] = counts[dayIdx] + 1;
       }
     });
-
-    return days.map((day, idx) => ({
-      day: day.substring(0, 3),
-      count: counts[idx]
-    }));
+    return days.map((day, idx) => ({ day: day.substring(0, 3), count: counts[idx] }));
   };
 
   const chartData = getWeeklyApplicationStats();
   const maxDayCount = Math.max(...chartData.map(d => d.count), 1);
+  const topCandidates = [...candidates].sort((a, b) => b.score - a.score).slice(0, 5);
 
-  // Leaderboard Top Candidates (Sort by score descending)
-  const topCandidates = [...candidates]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  const NavItem = ({ tab, icon, label }) => {
+    const isActive = activeTab === tab;
+    return (
+      <button 
+        onClick={() => setActiveTab(tab)}
+        className={`w-full flex items-center px-4 py-2 rounded-lg font-body-md text-body-md transition-all duration-200 ease-in-out ${isActive ? 'text-on-secondary-container bg-secondary-container font-bold' : 'text-on-primary-container hover:text-on-primary hover:bg-primary-fixed-dim/10'}`}
+      >
+        <span className={`material-symbols-outlined mr-2 ${isActive ? 'icon-fill' : ''}`}>{icon}</span>
+        {label}
+      </button>
+    );
+  };
 
   return (
-    <div className="app-layout">
-      {/* 1. Sidebar Component Layout */}
-      <aside className="app-sidebar">
-        <div className="sidebar-header">
-          <a href="#" className="sidebar-logo" onClick={() => setActiveTab('dashboard')}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <h1>TalentFlow AI</h1>
-          </a>
-          
-          <nav className="sidebar-nav">
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="9" />
-                <rect x="14" y="3" width="7" height="5" />
-                <rect x="14" y="12" width="7" height="9" />
-                <rect x="3" y="16" width="7" height="5" />
-              </svg>
-              Dashboard
-            </button>
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'applicants' ? 'active' : ''}`}
-              onClick={() => setActiveTab('applicants')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              Applicants Pool
-            </button>
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'jobs' ? 'active' : ''}`}
-              onClick={() => setActiveTab('jobs')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
-              Job Openings
-            </button>
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'scheduler' ? 'active' : ''}`}
-              onClick={() => setActiveTab('scheduler')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              Scheduler
-            </button>
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-              onClick={() => setActiveTab('analytics')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-              Reports & Analytics
-            </button>
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'ats' ? 'active' : ''}`}
-              onClick={() => setActiveTab('ats')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              ATS Matcher
-            </button>
-            <button 
-              className={`sidebar-nav-btn ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              Settings
-            </button>
-          </nav>
+    <div className="bg-background text-on-background h-screen flex overflow-hidden">
+      {/* Sidebar */}
+      <aside className="fixed left-0 top-0 h-full w-sidebar-width bg-primary-container border-r border-outline-variant flex flex-col py-6 px-4 z-20 hidden md:flex">
+        <div className="mb-10">
+          <h1 className="font-headline-md text-headline-md text-on-primary font-bold">TalentFlow AI</h1>
+          <p className="font-body-sm text-body-sm text-on-primary-container mt-1">HR Intelligence</p>
         </div>
-        
-        <div className="sidebar-footer">
-          <div className="profile-avatar">HR</div>
-          <div className="profile-info">
-            <span className="profile-name">HR Administrator</span>
-            <span className="profile-role-tag">Manager Panel</span>
+        <nav className="flex-1 space-y-2">
+          <NavItem tab="dashboard" icon="dashboard" label="Dashboard" />
+          <NavItem tab="applicants" icon="group" label="Candidates" />
+          <NavItem tab="jobs" icon="work" label="Jobs" />
+          <NavItem tab="scheduler" icon="calendar_today" label="Schedule" />
+          <NavItem tab="analytics" icon="analytics" label="Analytics" />
+          <NavItem tab="ats" icon="troubleshoot" label="ATS Matcher" />
+          <NavItem tab="settings" icon="settings" label="Settings" />
+        </nav>
+        <div className="mt-auto pt-6">
+          <button 
+            onClick={() => setShowUploadModal(true)}
+            className="w-full bg-secondary text-on-secondary font-body-md text-body-md font-bold py-2 px-4 rounded-lg hover:bg-secondary-container transition-colors shadow-sm flex items-center justify-center"
+          >
+            <span className="material-symbols-outlined mr-2 text-[18px]">upload_file</span>
+            Upload Resumes
+          </button>
+          <div className="flex items-center mt-6 pt-4 border-t border-outline-variant/30">
+            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary font-bold">HR</div>
+            <div className="ml-3">
+              <p className="font-body-md text-body-md text-on-primary font-semibold">HR Administrator</p>
+              <p className="font-body-sm text-body-sm text-on-primary-container">Manager Panel</p>
+            </div>
           </div>
         </div>
       </aside>
 
-      {/* 2. Main Content Area */}
-      <main className="app-content">
-        {/* Global Page Header */}
-        <header className="app-header">
-          <div className="header-title-section">
-            <h2>
-              {activeTab === 'dashboard' && 'Dashboard Overview'}
-              {activeTab === 'applicants' && 'Applicant Management'}
-              {activeTab === 'jobs' && 'Active Openings'}
-              {activeTab === 'scheduler' && 'Interview Scheduler'}
-              {activeTab === 'analytics' && 'Analytics Reports'}
-              {activeTab === 'ats' && 'ATS Match Playground'}
-              {activeTab === 'settings' && 'Global Configurations'}
-            </h2>
-            <p>
-              {activeTab === 'dashboard' && 'Screening funnel and daily applications overview'}
-              {activeTab === 'applicants' && 'Evaluate and manage submitted candidate resumes'}
-              {activeTab === 'jobs' && 'Create and maintain target job requirements'}
-              {activeTab === 'scheduler' && 'Establish meeting details for shortlisted profiles'}
-              {activeTab === 'analytics' && 'Compile reports, scores, and exports'}
-              {activeTab === 'ats' && 'Real-time keyword scoring and match diagnostics'}
-              {activeTab === 'settings' && 'Configure threshold variables and screening modes'}
-            </p>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col md:ml-sidebar-width h-full overflow-hidden">
+        {/* Header */}
+        <header className="bg-surface border-b border-outline-variant flex justify-between items-center h-16 px-6 z-10 sticky top-0">
+          <div className="flex items-center md:hidden">
+            <span className="material-symbols-outlined text-primary text-[24px] cursor-pointer">menu</span>
+            <span className="ml-2 font-headline-md text-headline-md font-bold text-on-surface">TalentFlow AI</span>
           </div>
-          
-          <div className="header-actions">
-            <button className="btn-secondary" onClick={handleDownloadReport}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Export Report
+          <div className="hidden md:flex items-center w-96 relative">
+            <span className="material-symbols-outlined absolute left-3 text-on-surface-variant text-[20px]">search</span>
+            <input 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full bg-surface-container-low border border-outline-variant rounded-lg py-2 pl-10 pr-4 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary transition-all" 
+              placeholder="Search candidates, jobs..." 
+              type="text"
+            />
+          </div>
+          <div className="flex items-center space-x-4">
+            <button className="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-low">
+              <span className="material-symbols-outlined">notifications</span>
             </button>
-            {activeTab === 'applicants' && (
-              <button className="btn-primary" onClick={() => setShowUploadModal(true)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Screen Candidate
-              </button>
-            )}
+            <button className="hidden sm:flex items-center text-secondary font-body-md text-body-md font-semibold hover:bg-surface-container-low px-2 py-1 rounded-md transition-colors" onClick={handleDownloadReport}>
+              <span className="material-symbols-outlined mr-1 text-[18px]">download</span> Export Report
+            </button>
           </div>
         </header>
 
-        {/* ----------------- SUBPAGE: DASHBOARD OVERVIEW ----------------- */}
-        {activeTab === 'dashboard' && (
-          <>
-            <section className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-icon logo-blue">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                  </svg>
+        {/* Dynamic Canvas */}
+        <main className="flex-1 overflow-y-auto p-6 bg-background">
+          <div className="max-w-container-max mx-auto">
+            
+            {/* Dashboard Tab */}
+            {activeTab === 'dashboard' && (
+              <>
+                <div className="mb-6">
+                  <h2 className="font-display-lg text-display-lg text-on-surface">Overview</h2>
+                  <p className="font-body-md text-body-md text-on-surface-variant mt-1">Real-time insights across your recruitment pipeline.</p>
                 </div>
-                <div className="stat-content">
-                  <span className="stat-label">Total Applicants</span>
-                  <span className="stat-val">{totalCount}</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon logo-green">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <div className="stat-content">
-                  <span className="stat-label">Shortlist Rate</span>
-                  <span className="stat-val">{shortlistPct}%</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon logo-gold">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                </div>
-                <div className="stat-content">
-                  <span className="stat-label">Average AI Score</span>
-                  <span className="stat-val">{averageScore}</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon logo-blue">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                  </svg>
-                </div>
-                <div className="stat-content">
-                  <span className="stat-label">Active Openings</span>
-                  <span className="stat-val">{activeJobsCount}</span>
-                </div>
-              </div>
-            </section>
-
-            <section className="dashboard-grid">
-              {/* Chart Grid: Trend & Funnel */}
-              <div className="card">
-                <h2>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="20" x2="18" y2="10" />
-                    <line x1="12" y1="20" x2="12" y2="4" />
-                    <line x1="6" y1="20" x2="6" y2="14" />
-                  </svg>
-                  Weekly Applications Trend
-                </h2>
                 
-                <div className="chart-container">
-                  <div className="chart-bars">
-                    {chartData.map(d => {
-                      const percentage = maxDayCount > 0 ? (d.count / maxDayCount) * 100 : 0;
-                      return (
-                        <div key={d.day} className="chart-bar-wrapper">
-                          <div 
-                            className="chart-bar" 
-                            style={{ height: `${Math.max(percentage, 3)}%` }}
-                          >
-                            <span className="chart-bar-tooltip">{d.count} Applied</span>
-                          </div>
-                          <span className="chart-bar-label">{d.day}</span>
-                        </div>
-                      );
-                    })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                  <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl p-4 ambient-shadow flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-body-sm text-body-sm text-on-surface-variant uppercase tracking-wider">Total Candidates</span>
+                      <span className="material-symbols-outlined text-secondary text-[20px] bg-secondary/10 p-1 rounded-md">groups</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-headline-lg text-headline-lg text-on-surface">{totalCount}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl p-4 ambient-shadow flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-body-sm text-body-sm text-on-surface-variant uppercase tracking-wider">Active Openings</span>
+                      <span className="material-symbols-outlined text-[#d97706] text-[20px] bg-[#d97706]/10 p-1 rounded-md">work</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-headline-lg text-headline-lg text-on-surface">{activeJobsCount}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl p-4 ambient-shadow flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-body-sm text-body-sm text-on-surface-variant uppercase tracking-wider">Shortlist Rate</span>
+                      <span className="material-symbols-outlined text-tertiary-container text-[20px] bg-tertiary-container/10 p-1 rounded-md">filter_alt</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-headline-lg text-headline-lg text-on-surface">{shortlistPct}%</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-surface-container-lowest border-l-2 border-l-[#8b5cf6] border-y border-r border-outline-variant/50 rounded-xl p-4 ai-glow flex flex-col justify-between relative overflow-hidden">
+                    <div className="absolute -right-4 -top-4 opacity-10">
+                      <span className="material-symbols-outlined text-[80px] text-[#8b5cf6]">smart_toy</span>
+                    </div>
+                    <div className="flex justify-between items-start mb-2 relative z-10">
+                      <span className="font-body-sm text-body-sm text-on-surface-variant uppercase tracking-wider">Avg AI Score</span>
+                      <span className="material-symbols-outlined text-[#8b5cf6] text-[20px] bg-[#8b5cf6]/10 p-1 rounded-md">psychology</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 relative z-10">
+                      <span className="font-headline-lg text-headline-lg text-on-surface">{averageScore}</span>
+                      <span className="font-label-mono text-label-mono text-[#8b5cf6] bg-[#8b5cf6]/10 px-1 py-0.5 rounded text-[10px]">AI RATING</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Leaderboard panel */}
-              <div className="card">
-                <h2>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                  Top Candidates Leaderboard
-                </h2>
-                <div className="leaderboard-list">
-                  {topCandidates.length === 0 ? (
-                    <p className="no-skills">No candidate evaluations available yet.</p>
-                  ) : (
-                    topCandidates.map(c => (
-                      <div key={c.id} className="leaderboard-item" onClick={() => { setSelectedCandidate(c); }}>
-                        <div className="leaderboard-info">
-                          <span className="leaderboard-name">{c.name}</span>
-                          <span className="leaderboard-role">{c.job_role}</span>
-                        </div>
-                        <span className="leaderboard-score">{c.score} pt</span>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 flex flex-col gap-6">
+                    <div className="bg-gradient-to-r from-surface-container to-surface-container-high border border-outline-variant/50 rounded-xl p-4 flex items-start gap-4">
+                      <div className="p-2 bg-white rounded-full shadow-sm flex-shrink-0">
+                        <span className="material-symbols-outlined text-[#8b5cf6]">auto_awesome</span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </section>
+                      <div>
+                        <h3 className="font-headline-md text-headline-md text-on-surface mb-1">AI System Active</h3>
+                        <p className="font-body-md text-body-md text-on-surface-variant mb-2">Processed {totalCount} total applications. Review the top candidates from the Leaderboard.</p>
+                      </div>
+                    </div>
 
-            <section className="card">
-              <h2>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                </svg>
-                Candidate Pipeline Funnel
-              </h2>
-              <div className="funnel-container">
-                <div className="funnel-row">
-                  <span className="funnel-label">Applied</span>
-                  <div className="funnel-bar-wrapper">
-                    <div className="funnel-bar" style={{ width: '100%' }}>
-                      <span className="funnel-value">{totalCount} (100%)</span>
+                    <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl overflow-hidden ambient-shadow flex-1">
+                      <div className="p-4 border-b border-outline-variant/50 bg-surface-bright flex justify-between items-center">
+                        <h3 className="font-headline-md text-headline-md text-on-surface">Top Candidates Leaderboard</h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-surface-container-lowest border-b border-outline-variant/30">
+                              <th className="p-2 font-label-mono text-label-mono text-on-surface-variant font-medium pl-4">Candidate</th>
+                              <th className="p-2 font-label-mono text-label-mono text-on-surface-variant font-medium">Role</th>
+                              <th className="p-2 font-label-mono text-label-mono text-on-surface-variant font-medium">AI Score</th>
+                              <th className="p-2 font-label-mono text-label-mono text-on-surface-variant font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="font-body-sm text-body-sm">
+                            {topCandidates.length === 0 ? (
+                              <tr><td colSpan="4" className="p-4 text-center text-on-surface-variant">No candidates yet.</td></tr>
+                            ) : topCandidates.map(c => (
+                              <tr key={c.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors cursor-pointer" onClick={() => setSelectedCandidate(c)}>
+                                <td className="p-2 pl-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-bold">{c.name.charAt(0)}</div>
+                                    <div>
+                                      <p className="font-semibold text-on-surface">{c.name}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-2 text-on-surface-variant">{c.job_role}</td>
+                                <td className="p-2">
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-label-mono text-label-mono text-[#059669]">{c.score}</span>
+                                    <div className="w-16 h-1.5 bg-surface-container rounded-full overflow-hidden"><div className="bg-[#059669] h-full" style={{ width: `${c.score}%` }}></div></div>
+                                  </div>
+                                </td>
+                                <td className="p-2">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#ecfdf5] text-[#065f46] border border-[#a7f3d0]">{c.status}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-6">
+                    <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl p-4 ambient-shadow">
+                      <h3 className="font-headline-md text-headline-md text-on-surface mb-2">Quick Drop</h3>
+                      <div onClick={() => setShowUploadModal(true)} className="border-2 border-dashed border-outline-variant rounded-lg p-6 text-center hover:border-secondary hover:bg-surface-container-low transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[160px]">
+                        <span className="material-symbols-outlined text-[32px] text-on-surface-variant group-hover:text-secondary mb-1 transition-colors">cloud_upload</span>
+                        <p className="font-body-md text-body-md text-on-surface font-medium">Click to screen candidate</p>
+                        <div className="mt-2 pt-2 border-t border-outline-variant/30 w-full flex items-center justify-center gap-1">
+                          <span className="material-symbols-outlined text-[14px] text-[#8b5cf6]">psychology</span>
+                          <span className="font-label-mono text-label-mono text-on-surface-variant text-[10px]">AI Auto-parse Active</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-                
-                <div className="funnel-row">
-                  <span className="funnel-label">Screened</span>
-                  <div className="funnel-bar-wrapper">
-                    <div className="funnel-bar" style={{ width: totalCount > 0 ? '100%' : '0%' }}>
-                      <span className="funnel-value">{totalCount} ({totalCount > 0 ? 100 : 0}%)</span>
+              </>
+            )}
+
+            {/* Applicants Tab */}
+            {activeTab === 'applicants' && (
+              <div className="bg-surface-container-lowest border border-outline-variant rounded-xl ambient-shadow overflow-hidden flex-1 flex flex-col">
+                <div className="p-4 border-b border-outline-variant bg-surface flex flex-wrap gap-4 items-center justify-between">
+                  <div className="flex gap-2 items-center">
+                    <div className="relative">
+                      <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="appearance-none bg-surface-container-lowest border border-outline-variant text-on-surface py-1.5 pl-3 pr-8 rounded-lg font-body-sm text-body-sm focus:ring-2 focus:ring-secondary focus:outline-none">
+                        {rolesList.map(r => <option key={r} value={r}>{r === 'All' ? 'All Roles' : r}</option>)}
+                      </select>
+                      <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[16px] text-on-surface-variant">arrow_drop_down</span>
                     </div>
+                    <div className="relative">
+                      <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="appearance-none bg-surface-container-lowest border border-outline-variant text-on-surface py-1.5 pl-3 pr-8 rounded-lg font-body-sm text-body-sm focus:ring-2 focus:ring-secondary focus:outline-none">
+                        <option value="All">Status: All</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Shortlisted">Shortlisted</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                      <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[16px] text-on-surface-variant">arrow_drop_down</span>
+                    </div>
+                  </div>
+                  <div className="relative w-full sm:w-64">
+                    <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">search</span>
+                    <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary font-body-sm text-body-sm" placeholder="Search in table..." type="text"/>
                   </div>
                 </div>
 
-                <div className="funnel-row">
-                  <span className="funnel-label">Shortlisted</span>
-                  <div className="funnel-bar-wrapper">
-                    <div className="funnel-bar" style={{ width: `${shortlistPct}%` }}>
-                      <span className="funnel-value">{shortlistCount} ({shortlistPct}%)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </>
-        )}
-
-        {/* ----------------- SUBPAGE: APPLICANTS POOL ----------------- */}
-        {activeTab === 'applicants' && (
-          <section className="table-section card">
-            <div className="table-filters">
-              <h2>Screened Candidates Pool ({filteredCandidates.length})</h2>
-              <div className="filter-controls">
-                <input 
-                  type="text" 
-                  placeholder="Search name/email..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="search-input"
-                />
-                
-                <select 
-                  value={roleFilter} 
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="filter-select"
-                >
-                  {rolesList.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-
-                <select 
-                  value={statusFilter} 
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="filter-select"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Shortlisted">Shortlisted</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="loading-state">
-                <span className="spinner large"></span>
-                <p>Loading candidate list...</p>
-              </div>
-            ) : error ? (
-              <div className="error-state">
-                <p>{error}</p>
-                <button className="btn-secondary" onClick={fetchCandidates}>Retry</button>
-              </div>
-            ) : filteredCandidates.length === 0 ? (
-              <div className="empty-state">
-                <p>No candidates found matching the active criteria.</p>
-              </div>
-            ) : (
-              <div className="table-wrapper">
-                <table className="candidate-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Target Role</th>
-                      <th>Score</th>
-                      <th>Status</th>
-                      <th>Screened Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCandidates.map(c => {
-                      const isPassed = c.score >= settings.threshold;
-                      return (
-                        <tr key={c.id} className="candidate-row" onClick={() => setSelectedCandidate(c)}>
-                          <td>
-                            <div className="candidate-info">
-                              <strong>{c.name}</strong>
-                              <span>{c.email}</span>
+                <div className="overflow-x-auto flex-1 min-h-[400px]">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-surface sticky top-0 z-10 border-b border-outline-variant font-label-mono text-label-mono text-on-surface-variant uppercase">
+                      <tr>
+                        <th className="py-2 px-4 font-medium">Candidate</th>
+                        <th className="py-2 px-4 font-medium">Applied Role</th>
+                        <th className="py-2 px-4 font-medium">AI Score</th>
+                        <th className="py-2 px-4 font-medium">Status</th>
+                        <th className="py-2 px-4 font-medium text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-body-md text-body-md text-on-surface divide-y divide-outline-variant">
+                      {filteredCandidates.map(c => (
+                        <tr key={c.id} className="hover:bg-surface-container-low transition-colors group cursor-pointer" onClick={() => setSelectedCandidate(c)}>
+                          <td className="py-2 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-secondary font-bold text-[12px]">{c.name.charAt(0)}</div>
+                              <div>
+                                <div className="font-bold">{c.name}</div>
+                                <div className="text-on-surface-variant font-body-sm text-body-sm">{c.email}</div>
+                              </div>
                             </div>
                           </td>
-                          <td>{c.job_role}</td>
-                          <td>
-                            <span className={`score-badge ${isPassed ? 'pass' : 'fail'}`}>
-                              {c.score}
-                            </span>
+                          <td className="py-2 px-4 font-medium text-on-surface-variant">{c.job_role}</td>
+                          <td className="py-2 px-4">
+                            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-container text-secondary font-label-mono text-label-mono">
+                              <span className="material-symbols-outlined text-[14px]">auto_awesome</span> {c.score}%
+                            </div>
                           </td>
-                          <td onClick={(e) => e.stopPropagation()}>
+                          <td className="py-2 px-4" onClick={(e) => e.stopPropagation()}>
                             <select 
                               value={c.status} 
                               onChange={(e) => handleStatusChange(c.id, e.target.value)}
-                              className={`status-select ${c.status.toLowerCase()}`}
+                              className="appearance-none bg-surface-container-lowest border border-outline-variant text-on-surface py-1 pl-2 pr-6 rounded-lg font-body-sm text-body-sm focus:outline-none"
                             >
                               <option value="Pending">Pending</option>
                               <option value="Shortlisted">Shortlisted</option>
                               <option value="Rejected">Rejected</option>
                             </select>
                           </td>
-                          <td>{new Date(c.timestamp).toLocaleDateString()}</td>
-                          <td onClick={(e) => e.stopPropagation()}>
-                            <button className="btn-icon" onClick={() => setSelectedCandidate(c)}>
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="1" />
-                                <circle cx="12" cy="5" r="1" />
-                                <circle cx="12" cy="19" r="1" />
-                              </svg>
+                          <td className="py-2 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={(e) => handleDeleteCandidate(c.id, e)} className="text-on-surface-variant hover:text-error p-2 rounded-full hover:bg-error-container transition-colors" title="Delete Candidate">
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
                             </button>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* ----------------- SUBPAGE: JOB OPENINGS ----------------- */}
-        {activeTab === 'jobs' && (
-          <section className="jobs-grid">
-            {/* Create Job card */}
-            <div className="card">
-              <h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Add New Job Opening
-              </h2>
-              <form onSubmit={handleCreateJob}>
-                <div className="form-group">
-                  <label>Job Posting Title</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Senior Backend Engineer" 
-                    value={jobTitle} 
-                    onChange={(e) => setJobTitle(e.target.value)} 
-                    required 
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label>Job Description Requirements</label>
-                  <textarea 
-                    placeholder="Provide details, key responsibilities, and required core skills..." 
-                    value={jobDescText} 
-                    onChange={(e) => setJobDescText(e.target.value)} 
-                    required 
-                    rows="6"
-                    className="jd-textarea"
-                  />
-                </div>
-
-                {jobMessage && <div className="alert success">{jobMessage}</div>}
-                {jobError && <div className="alert danger">{jobError}</div>}
-
-                <button type="submit" className="btn-primary" disabled={savingJob}>
-                  {savingJob ? (
-                    <>
-                      <span className="spinner"></span>
-                      Saving Job Opening...
-                    </>
-                  ) : (
-                    "Publish Job Opening"
-                  )}
-                </button>
-              </form>
-            </div>
-
-            {/* List Active Jobs */}
-            <div className="card jobs-list-card">
-              <h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                </svg>
-                Active Job Openings ({activeJobsCount})
-              </h2>
-              
-              {jobs.length === 0 ? (
-                <p className="no-jds-text">No job openings created yet.</p>
-              ) : (
-                <div className="jd-list">
-                  {jobs.map(j => {
-                    const applicantsCount = candidates.filter(c => c.job_description_id === j.id).length;
-                    return (
-                      <div key={j.id} className="job-card">
-                        <div className="job-card-header">
-                          <h3>{j.title}</h3>
-                          <span className="jd-id-tag">ID: {j.id}</span>
-                        </div>
-                        <div className="job-card-body">
-                          <p className="jd-item-snippet">
-                            {j.description_text.length > 180 
-                              ? `${j.description_text.substring(0, 180)}...` 
-                              : j.description_text}
-                          </p>
-                        </div>
-                        <div className="job-card-footer">
-                          <span className="job-stat-pill">{applicantsCount} Screened</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ----------------- SUBPAGE: INTERVIEW SCHEDULER ----------------- */}
-        {activeTab === 'scheduler' && (
-          <section className="scheduler-grid">
-            <div className="card">
-              <h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
-                Pending Schedules (Shortlisted Candidates)
-              </h2>
-              
-              <div className="leaderboard-list">
-                {candidates.filter(c => c.status === 'Shortlisted').length === 0 ? (
-                  <p className="no-skills">No shortlisted candidates pending schedule.</p>
-                ) : (
-                  candidates.filter(c => c.status === 'Shortlisted').map(c => (
-                    <div key={c.id} className="schedule-card">
-                      <div className="schedule-header">
-                        <div className="schedule-candidate-info">
-                          <h3>{c.name}</h3>
-                          <span>{c.email}</span>
-                        </div>
-                        <span className="schedule-score-badge">Score: {c.score}</span>
-                      </div>
-                      
-                      <div className="schedule-body">
-                        <span className="schedule-field">
-                          <strong>Target Role:</strong> {c.job_role}
-                        </span>
-                        {c.meet_link ? (
-                          <span className="schedule-field text-green">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <polygon points="23 7 16 12 23 17 23 7" />
-                              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                            </svg>
-                            Google Meet Active: <a href={c.meet_link} target="_blank" rel="noreferrer">{c.meet_link.substring(0, 30)}...</a>
-                          </span>
-                        ) : (
-                          <span className="schedule-field text-orange">No Meeting Set</span>
-                        )}
-                      </div>
-
-                      <div className="schedule-actions">
-                        <button 
-                          className="btn-secondary" 
-                          onClick={() => {
-                            setSchedulingCandidateId(c.id);
-                            setMeetLink(c.meet_link || '');
-                            setCalendarLink(c.meeting_link || '');
-                          }}
-                        >
-                          {c.meet_link ? 'Edit Schedule Links' : 'Assign Interview Links'}
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Schedule Booking Assign Modal Box */}
-            {schedulingCandidateId && (
-              <div className="card">
-                <h2>Configure Schedule Links</h2>
-                {(() => {
-                  const cand = candidates.find(c => c.id === schedulingCandidateId);
-                  return cand ? (
-                    <form onSubmit={handleScheduleMeetingSubmit}>
-                      <p className="settings-desc">Assign interview meeting URL and Google Calendar details for <strong>{cand.name}</strong>.</p>
-                      
-                      <div className="form-group">
-                        <label>Google Meet URL</label>
-                        <input 
-                          type="url" 
-                          placeholder="https://meet.google.com/abc-defg-hij" 
-                          value={meetLink} 
-                          onChange={(e) => setMeetLink(e.target.value)} 
-                          required 
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label>Google Calendar Link (Optional)</label>
-                        <input 
-                          type="url" 
-                          placeholder="https://calendar.google.com/calendar/event..." 
-                          value={calendarLink} 
-                          onChange={(e) => setCalendarLink(e.target.value)} 
-                        />
-                      </div>
-
-                      <div className="schedule-actions">
-                        <button type="submit" className="btn-primary" disabled={scheduling}>
-                          {scheduling ? 'Saving...' : 'Save Schedule'}
-                        </button>
-                        <button 
-                          type="button" 
-                          className="btn-secondary" 
-                          onClick={() => {
-                            setSchedulingCandidateId(null);
-                            setMeetLink('');
-                            setCalendarLink('');
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  ) : null;
-                })()}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* ----------------- SUBPAGE: REPORTS & ANALYTICS ----------------- */}
-        {activeTab === 'analytics' && (
-          <>
-            <section className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-icon logo-blue">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="20" x2="18" y2="10" />
-                    <line x1="12" y1="20" x2="12" y2="4" />
-                    <line x1="6" y1="20" x2="6" y2="14" />
-                  </svg>
-                </div>
-                <div className="stat-content">
-                  <span className="stat-label">Applicants Evaluated</span>
-                  <span className="stat-val">{totalCount}</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon logo-green">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <div className="stat-content">
-                  <span className="stat-label">Hiring Conversions</span>
-                  <span className="stat-val">{shortlistCount}</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon logo-gold">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </div>
-                <div className="stat-content">
-                  <span className="stat-label">Average Interview Score</span>
-                  <span className="stat-val">{averageScore}</span>
-                </div>
-              </div>
-            </section>
-
-            <section className="dashboard-grid">
-              <div className="card">
-                <h2>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                  </svg>
-                  Commonly Extracted Skills
-                </h2>
-                
-                {/* Dynamically aggregate extracted skills */}
-                {(() => {
-                  const allSkills = [];
-                  candidates.forEach(c => {
-                    try {
-                      const list = typeof c.skills_matched === 'string' ? JSON.parse(c.skills_matched) : c.skills_matched;
-                      if (Array.isArray(list)) allSkills.push(...list);
-                    } catch (e) {}
-                  });
-                  
-                  const skillCounts = {};
-                  allSkills.forEach(s => {
-                    const clean = s.trim().toLowerCase();
-                    skillCounts[clean] = (skillCounts[clean] || 0) + 1;
-                  });
-                  
-                  const sorted = Object.entries(skillCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10);
-                    
-                  return sorted.length === 0 ? (
-                    <p className="no-skills">No extracted skill tags available yet.</p>
-                  ) : (
-                    <div className="skills-grid">
-                      {sorted.map(([skill, count]) => (
-                        <span key={skill} className="pill pill-green" style={{ fontSize: '13px', padding: '8px 14px' }}>
-                          {skill.charAt(0).toUpperCase() + skill.slice(1)} ({count})
-                        </span>
                       ))}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="card">
-                <h2>PDF Generation Subprocess</h2>
-                <p className="settings-desc">Run reportlab compilation inside the backend Docker stack to output candidates logs reports.</p>
-                <button className="btn-primary" onClick={handleDownloadReport} style={{ width: 'max-content' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  Generate PDF Summary Report
-                </button>
-              </div>
-            </section>
-          </>
-        )}
-
-        {/* ----------------- SUBPAGE: ATS MATCH PLAYGROUND ----------------- */}
-        {activeTab === 'ats' && (
-          <div className="dashboard-main ats-playground-main">
-            {/* ATS Checker Form Card */}
-            <section className="form-section card ats-form-card">
-              <h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-                ATS Match Playground
-              </h2>
-              <form onSubmit={handleAtsCheckSubmit}>
-                <div className="form-group">
-                  <label>Job Description Requirements</label>
-                  <textarea 
-                    placeholder="Paste the Job Description requirements here..." 
-                    value={atsJD} 
-                    onChange={(e) => setAtsJD(e.target.value)} 
-                    required 
-                    rows="6"
-                    className="jd-textarea"
-                  />
+                    </tbody>
+                  </table>
                 </div>
+              </div>
+            )}
 
-                <div className="form-group">
-                  <label>Upload Your Resume (PDF / TXT)</label>
-                  <div className="file-drop-zone">
-                    <input 
-                      id="ats-file-input"
-                      type="file" 
-                      accept=".pdf,.txt"
-                      onChange={(e) => setAtsFile(e.target.files[0])}
-                      required
-                    />
-                    <div className="drop-zone-content">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="17 8 12 3 7 8" />
-                        <line x1="12" y1="3" x2="12" y2="15" />
-                      </svg>
-                      <span>{atsFile ? atsFile.name : "Drag & drop file or click to browse"}</span>
+            {/* Jobs Tab */}
+            {activeTab === 'jobs' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow">
+                  <h2 className="font-headline-md text-headline-md text-on-surface mb-4 flex items-center gap-2">
+                    <span className="material-symbols-outlined">work</span> Add New Job Opening
+                  </h2>
+                  <form onSubmit={handleCreateJob} className="flex flex-col gap-4">
+                    <div>
+                      <label className="block font-body-sm text-body-sm text-on-surface-variant mb-1">Job Posting Title</label>
+                      <input type="text" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} required className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-2 font-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary"/>
                     </div>
+                    <div>
+                      <label className="block font-body-sm text-body-sm text-on-surface-variant mb-1">Job Description Requirements</label>
+                      <textarea value={jobDescText} onChange={(e) => setJobDescText(e.target.value)} required rows="6" className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-2 font-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary"/>
+                    </div>
+                    {jobMessage && <div className="text-[#059669] font-body-sm bg-[#ecfdf5] p-2 rounded border border-[#a7f3d0]">{jobMessage}</div>}
+                    {jobError && <div className="text-error font-body-sm bg-error-container p-2 rounded">{jobError}</div>}
+                    <button type="submit" disabled={savingJob} className="bg-secondary text-on-secondary py-2 rounded-lg font-bold hover:bg-secondary-container transition-colors disabled:opacity-50">
+                      {savingJob ? 'Saving...' : 'Publish Job Opening'}
+                    </button>
+                  </form>
+                </div>
+                
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow">
+                  <h2 className="font-headline-md text-headline-md text-on-surface mb-4">Active Job Openings</h2>
+                  <div className="flex flex-col gap-4">
+                    {jobs.map(j => (
+                      <div key={j.id} className="border border-outline-variant rounded-lg p-4 bg-surface-container-low">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-bold text-on-surface">{j.title}</h3>
+                          <span className="text-xs text-on-surface-variant bg-surface-container px-2 py-1 rounded">ID: {j.id}</span>
+                        </div>
+                        <p className="text-sm text-on-surface-variant truncate">{j.description_text}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              </div>
+            )}
 
-                {atsError && <div className="alert danger">{atsError}</div>}
+            {/* Analytics Tab */}
+            {activeTab === 'analytics' && (
+              <div className="flex flex-col gap-6">
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow text-center">
+                  <h2 className="font-display-lg text-display-lg text-on-surface mb-2">Reporting & Analytics</h2>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">Generate compiled PDF reports of all candidates, scores, and recruitment funnels.</p>
+                  <button onClick={handleDownloadReport} className="bg-secondary text-on-secondary px-6 py-3 rounded-lg font-bold hover:bg-secondary-container transition-colors shadow-md inline-flex items-center gap-2">
+                    <span className="material-symbols-outlined">download</span> Generate Full PDF Report
+                  </button>
+                </div>
+              </div>
+            )}
 
-                <button type="submit" className="btn-primary" disabled={atsChecking}>
-                  {atsChecking ? (
-                    <>
-                      <span className="spinner"></span>
-                      Analyzing ATS Match...
-                    </>
+            {/* ATS Matcher Tab */}
+            {activeTab === 'ats' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow">
+                  <h2 className="font-headline-md text-headline-md text-on-surface mb-4">ATS Match Playground</h2>
+                  <form onSubmit={handleAtsCheckSubmit} className="flex flex-col gap-4">
+                    <div>
+                      <label className="block font-body-sm text-body-sm text-on-surface-variant mb-1">Job Description</label>
+                      <textarea value={atsJD} onChange={(e) => setAtsJD(e.target.value)} required rows="5" className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-2 font-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary"/>
+                    </div>
+                    <div>
+                      <label className="block font-body-sm text-body-sm text-on-surface-variant mb-1">Upload Resume (PDF/TXT)</label>
+                      <input type="file" accept=".pdf,.txt" onChange={(e) => setAtsFile(e.target.files[0])} required className="w-full border border-dashed border-outline-variant rounded-lg p-4 font-body-md text-on-surface"/>
+                    </div>
+                    {atsError && <div className="text-error font-body-sm bg-error-container p-2 rounded">{atsError}</div>}
+                    <button type="submit" disabled={atsChecking} className="bg-[#8b5cf6] text-white py-2 rounded-lg font-bold hover:bg-[#7c3aed] transition-colors disabled:opacity-50">
+                      {atsChecking ? 'Analyzing...' : 'Calculate ATS Match Score'}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow ai-glow border-l-4 border-l-[#8b5cf6]">
+                  <h2 className="font-headline-md text-headline-md text-on-surface mb-4">Match Results</h2>
+                  {atsResult ? (
+                    <div>
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="text-4xl font-bold text-[#8b5cf6]">{atsResult.ats_score}%</div>
+                        <p className="text-on-surface-variant text-sm italic">{atsResult.match_summary}</p>
+                      </div>
+                      <div className="mb-4">
+                        <h4 className="font-bold text-on-surface text-sm mb-2">Matched Keywords</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {atsResult.matched_keywords.map(kw => <span key={kw} className="bg-[#ecfdf5] text-[#065f46] px-2 py-1 rounded text-xs">{kw}</span>)}
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm mb-2">Missing Keywords</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {atsResult.missing_keywords.map(kw => <span key={kw} className="bg-error-container text-error px-2 py-1 rounded text-xs">{kw}</span>)}
+                        </div>
+                      </div>
+                    </div>
                   ) : (
-                    "Calculate ATS Match Score"
+                    <p className="text-on-surface-variant">Upload a resume and job description to see the ATS score analysis.</p>
                   )}
-                </button>
-              </form>
-            </section>
-
-            {/* ATS Results Card */}
-            <section className="table-section card ats-results-card">
-              <h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="20" x2="18" y2="10" />
-                  <line x1="12" y1="20" x2="12" y2="4" />
-                  <line x1="6" y1="20" x2="6" y2="14" />
-                </svg>
-                ATS Match Analysis
-              </h2>
-
-              {atsResult ? (
-                <div className="ats-results-wrapper">
-                  <div className="ats-score-badge-container">
-                    <div className={`ats-score-ring ${atsResult.ats_score >= 80 ? 'good' : atsResult.ats_score >= 50 ? 'warning' : 'poor'}`}>
-                      <span className="ats-score-num">{atsResult.ats_score}</span>
-                      <span className="ats-score-label">Match Score</span>
-                    </div>
-                    <div className="ats-summary-container">
-                      <h3>Analysis Summary</h3>
-                      <p className="ats-summary-text">"{atsResult.match_summary}"</p>
-                    </div>
-                  </div>
-
-                  <div className="ats-keywords-grid">
-                    <div className="keywords-block">
-                      <h4>Matched Keywords ({atsResult.matched_keywords.length})</h4>
-                      {atsResult.matched_keywords.length > 0 ? (
-                        <div className="keywords-tags">
-                          {atsResult.matched_keywords.map((kw, i) => (
-                            <span key={i} className="kw-tag kw-matched">{kw}</span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="no-keywords">No matched keywords found.</p>
-                      )}
-                    </div>
-
-                    <div className="keywords-block">
-                      <h4>Missing Keywords ({atsResult.missing_keywords.length})</h4>
-                      {atsResult.missing_keywords.length > 0 ? (
-                        <div className="keywords-tags">
-                          {atsResult.missing_keywords.map((kw, i) => (
-                            <span key={i} className="kw-tag kw-missing">{kw}</span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="no-keywords">No missing keywords identified.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="ats-empty-state">
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10 9 9 9 8 9" />
-                  </svg>
-                  <p>Upload your resume and paste a job description on the left to calculate your real-time ATS match analysis.</p>
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-
-        {/* ----------------- SUBPAGE: SETTINGS PAGE ----------------- */}
-        {activeTab === 'settings' && (
-          <section className="settings-grid">
-            <div className="card settings-card">
-              <h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-                AI Model & Screening Parameters
-              </h2>
-              
-              {/* Threshold variable slider */}
-              <div className="settings-group">
-                <div className="settings-label-wrapper">
-                  <label>Auto-Shortlist Score Threshold</label>
-                  <span className="settings-val-badge">{settings.threshold}/100</span>
-                </div>
-                <p className="settings-desc">Candidates scoring at or above this score are automatically designated as 'Shortlisted'. Others will be marked as 'Rejected'.</p>
-                <div className="settings-slider-wrapper">
-                  <span className="chart-bar-label">0</span>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={settings.threshold} 
-                    onChange={(e) => setSettings(prev => ({ ...prev, threshold: parseInt(e.target.value, 10) }))}
-                    className="settings-slider"
-                  />
-                  <span className="chart-bar-label">100</span>
                 </div>
               </div>
-
-              {/* Model selection dropdown */}
-              <div className="settings-group">
-                <div className="settings-label-wrapper">
-                  <label>Ollama Screening Model</label>
+            )}
+            
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow">
+                  <h2 className="font-headline-md text-headline-md text-on-surface mb-4">AI Model Parameters</h2>
+                  <div className="flex flex-col gap-6">
+                    <div>
+                      <label className="flex justify-between font-body-md text-on-surface mb-1">
+                        <span>Auto-Shortlist Score Threshold</span>
+                        <span className="font-bold text-secondary">{settings.threshold}/100</span>
+                      </label>
+                      <input type="range" min="0" max="100" value={settings.threshold} onChange={(e) => setSettings(prev => ({ ...prev, threshold: parseInt(e.target.value, 10) }))} className="w-full"/>
+                    </div>
+                    <div>
+                      <label className="block font-body-md text-on-surface mb-1">Ollama Screening Model</label>
+                      <select value={settings.ollamaModel} onChange={(e) => setSettings(prev => ({ ...prev, ollamaModel: e.target.value }))} className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-2 font-body-md text-on-surface">
+                        <option value="llama3">Llama 3 (8B)</option>
+                        <option value="mistral">Mistral (7B)</option>
+                        <option value="phi3">Phi 3 (3.8B)</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <p className="settings-desc font-light">Select the local LLM model loaded inside the Ollama Docker container.</p>
+              </div>
+            )}
+
+            {/* Scheduler Tab */}
+            {activeTab === 'scheduler' && (
+              <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 ambient-shadow">
+                <h2 className="font-headline-md text-headline-md text-on-surface mb-4">Interview Scheduler</h2>
+                <div className="flex flex-col gap-4">
+                  {candidates.filter(c => c.status === 'Shortlisted').map(c => (
+                    <div key={c.id} className="border border-outline-variant rounded-lg p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface-container-low">
+                      <div>
+                        <h3 className="font-bold text-on-surface">{c.name}</h3>
+                        <p className="text-sm text-on-surface-variant">{c.job_role} • Score: {c.score}</p>
+                        {c.meet_link ? <p className="text-xs text-[#059669] mt-1 break-all">Meet: {c.meet_link}</p> : <p className="text-xs text-[#d97706] mt-1">No Meeting Set</p>}
+                      </div>
+                      <button onClick={() => { setSchedulingCandidateId(c.id); setMeetLink(c.meet_link || ''); setCalendarLink(c.meeting_link || ''); }} className="bg-surface-container border border-outline-variant text-on-surface px-4 py-2 rounded-lg font-bold hover:bg-surface-container-highest transition-colors text-sm shrink-0">
+                        Edit Schedule
+                      </button>
+                    </div>
+                  ))}
+                  {candidates.filter(c => c.status === 'Shortlisted').length === 0 && <p className="text-on-surface-variant">No shortlisted candidates to schedule.</p>}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </main>
+      </div>
+
+      {/* Screen New Candidate Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowUploadModal(false)}>
+          <div className="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-[512px] ambient-shadow" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-display-lg text-2xl text-on-surface font-bold">Screen Candidate</h3>
+              <button className="text-on-surface-variant hover:text-error" onClick={() => setShowUploadModal(false)}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <form onSubmit={handleUploadSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-on-surface">Link to Job Opening (Optional)</label>
                 <select 
-                  value={settings.ollamaModel}
-                  onChange={(e) => setSettings(prev => ({ ...prev, ollamaModel: e.target.value }))}
-                  className="filter-select"
-                  style={{ width: '100%' }}
+                  value={selectedJobId} 
+                  onChange={(e) => {
+                    setSelectedJobId(e.target.value);
+                    const job = jobs.find(j => j.id.toString() === e.target.value);
+                    if (job) setJobRole(job.title);
+                  }}
+                  className="w-full border border-outline-variant rounded-lg p-2 bg-surface-container-lowest text-on-surface"
                 >
-                  <option value="llama3">Llama 3 (8B) -- Recomended</option>
-                  <option value="mistral">Mistral (7B)</option>
-                  <option value="phi3">Phi 3 (3.8B)</option>
+                  <option value="">-- No linked JD --</option>
+                  {jobs.map(j => (
+                    <option key={j.id} value={j.id}>{j.title}</option>
+                  ))}
                 </select>
               </div>
-            </div>
 
-            <div className="card settings-card">
-              <h2>Automated Workflows</h2>
+              <input type="text" placeholder="Target Job Role (e.g. Software Engineer)" value={jobRole} onChange={(e) => setJobRole(e.target.value)} required className="w-full border border-outline-variant rounded-lg p-2 bg-surface-container-lowest" />
+              <input type="file" id="file-input" accept=".pdf,.txt" multiple onChange={(e) => setFiles(Array.from(e.target.files))} required className="w-full border border-dashed border-outline-variant rounded-lg p-4 bg-surface-container-lowest" />
               
-              <div className="settings-toggle-wrapper">
-                <div className="settings-toggle-label">
-                  <span>Auto-Shortlist Candidate</span>
-                  <p>Assign shortlisted status immediately based on score threshold</p>
+              {uploadMessage && <div className="text-[#059669] text-sm bg-[#ecfdf5] p-2 rounded">{uploadMessage}</div>}
+              {uploadError && <div className="text-error text-sm bg-error-container p-2 rounded">{uploadError}</div>}
+              
+              <button type="submit" disabled={uploading} className="bg-secondary text-on-secondary py-3 rounded-lg font-bold hover:bg-secondary-container transition-colors disabled:opacity-50 mt-2">
+                {uploading ? uploadMessage || `Analyzing...` : 'Run AI Screener'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Detail Drawer */}
+      {selectedCandidate && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end backdrop-blur-sm" onClick={() => setSelectedCandidate(null)}>
+          <div className="bg-surface-container-lowest w-full max-w-[448px] h-full overflow-y-auto p-6 ambient-shadow transform transition-transform" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="font-display-lg text-2xl text-on-surface font-bold">{selectedCandidate.name}</h3>
+                <p className="text-on-surface-variant font-medium">{selectedCandidate.job_role}</p>
+              </div>
+              <button className="text-on-surface-variant hover:text-error bg-surface-container-low rounded-full p-1" onClick={() => setSelectedCandidate(null)}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <div className="flex flex-col gap-6">
+              <div className="bg-surface-container-low rounded-xl p-4 flex items-center justify-between border-l-4 border-l-secondary">
+                <div>
+                  <p className="text-xs text-on-surface-variant uppercase tracking-wider mb-1">AI Screening Score</p>
+                  <p className="text-3xl font-bold text-on-surface">{selectedCandidate.score}<span className="text-lg text-on-surface-variant font-normal">/100</span></p>
                 </div>
-                <label className="switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.autoShortlist} 
-                    onChange={(e) => setSettings(prev => ({ ...prev, autoShortlist: e.target.checked }))}
-                  />
-                  <span className="slider-round"></span>
-                </label>
+                <span className="bg-[#dcfce7] text-[#166534] px-3 py-1 rounded-full text-sm font-bold border border-[#bbf7d0]">{selectedCandidate.status}</span>
               </div>
 
-              <div className="settings-toggle-wrapper">
-                <div className="settings-toggle-label">
-                  <span>SQLite Fallback Mode</span>
-                  <p>Enable automated SQLite database replication when PostgreSQL is down</p>
-                </div>
-                <label className="switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.dbBackup} 
-                    onChange={(e) => setSettings(prev => ({ ...prev, dbBackup: e.target.checked }))}
-                  />
-                  <span className="slider-round"></span>
-                </label>
+              <div>
+                <h4 className="font-bold text-on-surface mb-2">AI Summary Reason</h4>
+                <p className="text-sm text-on-surface-variant italic border-l-2 border-outline-variant pl-3">{selectedCandidate.reason}</p>
               </div>
-            </div>
-          </section>
-        )}
-      </main>
 
-      {/* 3. Screen New Candidate Modal (Popup overlay) */}
-      {showUploadModal && (
-        <div className="modal-overlay" onClick={() => setShowUploadModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Screen New Candidate Resume</h3>
-              <button className="btn-close" onClick={() => setShowUploadModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              <form onSubmit={handleUploadSubmit}>
-                <div className="form-group">
-                  <label>Full Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Alice Smith" 
-                    value={name} 
-                    onChange={(e) => setName(e.target.value)} 
-                    required 
-                  />
+              <div>
+                <h4 className="font-bold text-on-surface mb-2">Skills Matched</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCandidate.skills_matched.length > 0 ? selectedCandidate.skills_matched.map(s => <span key={s} className="bg-[#ecfdf5] text-[#065f46] px-2 py-1 rounded text-xs">{s}</span>) : <span className="text-xs text-on-surface-variant">None</span>}
                 </div>
-                
-                <div className="form-group-row">
-                  <div className="form-group">
-                    <label>Email Address</label>
-                    <input 
-                      type="email" 
-                      placeholder="e.g. alice@example.com" 
-                      value={email} 
-                      onChange={(e) => setEmail(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Phone Number (Optional)</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. +1234567890" 
-                      value={phone} 
-                      onChange={(e) => setPhone(e.target.value)} 
-                    />
-                  </div>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-on-surface mb-2">Missing Skills</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCandidate.missing_skills.length > 0 ? selectedCandidate.missing_skills.map(s => <span key={s} className="bg-error-container text-error px-2 py-1 rounded text-xs">{s}</span>) : <span className="text-xs text-on-surface-variant">None</span>}
                 </div>
+              </div>
+              
+              <div className="border-t border-outline-variant pt-4 mt-2">
+                <h4 className="font-bold text-on-surface mb-2">Resume Extract</h4>
+                <pre className="text-xs text-on-surface-variant bg-surface-container-low p-3 rounded-lg overflow-x-auto whitespace-pre-wrap max-h-64">{selectedCandidate.resume_text}</pre>
+              </div>
 
-                <div className="form-group">
-                  <label>Target Job Opening (Optional)</label>
-                  <select
-                    value={selectedJobId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedJobId(id);
-                      if (id) {
-                        const selected = jobs.find(j => j.id === parseInt(id));
-                        if (selected) {
-                          setJobRole(selected.title);
-                        }
-                      } else {
-                        setJobRole('');
-                      }
-                    }}
-                  >
-                    <option value="">-- None (Generic Target Role) --</option>
-                    {jobs.map(j => (
-                      <option key={j.id} value={j.id}>{j.title}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Job Role Target</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Software Engineer" 
-                    value={jobRole} 
-                    onChange={(e) => setJobRole(e.target.value)} 
-                    required 
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Upload Resume File (PDF / TXT)</label>
-                  <div className="file-drop-zone">
-                    <input 
-                      id="file-input"
-                      type="file" 
-                      accept=".pdf,.txt"
-                      onChange={(e) => setFile(e.target.files[0])}
-                      required
-                    />
-                    <div className="drop-zone-content">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="17 8 12 3 7 8" />
-                        <line x1="12" y1="3" x2="12" y2="15" />
-                      </svg>
-                      <span>{file ? file.name : "Drag & drop file or click to browse"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {uploadMessage && <div className="alert success">{uploadMessage}</div>}
-                {uploadError && <div className="alert danger">{uploadError}</div>}
-
-                <button type="submit" className="btn-primary" disabled={uploading}>
-                  {uploading ? (
-                    <>
-                      <span className="spinner"></span>
-                      Analyzing Candidate Resume...
-                    </>
-                  ) : (
-                    "Upload and Run Screener"
-                  )}
+              <div className="border-t border-outline-variant pt-4 mt-2 flex justify-end gap-2">
+                <a 
+                  href={`https://mail.google.com/mail/?view=cm&fs=1&to=${selectedCandidate.email}&su=Interview Invitation: ${selectedCandidate.job_role}&body=Hi ${selectedCandidate.name},%0D%0A%0D%0AWe are very impressed by your background and would like to invite you to an interview for the ${selectedCandidate.job_role} position.%0D%0A%0D%0APlease let us know your availability over the next few days.`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold hover:bg-primary-container hover:text-on-primary-container transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">mail</span> Email Candidate
+                </a>
+                <button 
+                  onClick={() => handleDeleteCandidate(selectedCandidate.id)}
+                  className="flex items-center gap-2 px-4 py-2 bg-error-container text-error rounded-lg font-bold hover:bg-[#fecdd3] transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">delete</span> Delete Candidate
                 </button>
-              </form>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. Candidate Details Modal/Drawer (Slide-in profile) */}
-      {selectedCandidate && (
-        <div className="drawer-overlay" onClick={() => setSelectedCandidate(null)}>
-          <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
-            <div className="drawer-header">
-              <h3>Candidate Evaluation Profile</h3>
-              <button className="btn-close" onClick={() => setSelectedCandidate(null)}>&times;</button>
-            </div>
-            
-            <div className="drawer-body">
-              <div className="profile-header">
-                <h2>{selectedCandidate.name}</h2>
-                <span className="profile-role">{selectedCandidate.job_role}</span>
-                <div className="profile-meta">
-                  <span><strong>Email:</strong> {selectedCandidate.email}</span>
-                  {selectedCandidate.phone && <span><strong>Phone:</strong> {selectedCandidate.phone}</span>}
-                  <span><strong>Screened:</strong> {new Date(selectedCandidate.timestamp).toLocaleDateString()}</span>
-                </div>
+      {/* Schedule Edit Modal */}
+      {schedulingCandidateId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setSchedulingCandidateId(null)}>
+          <div className="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-[384px] ambient-shadow" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-4 text-on-surface">Set Interview Links</h3>
+            <form onSubmit={handleScheduleMeetingSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm text-on-surface-variant mb-1">Google Meet URL</label>
+                <input type="url" value={meetLink} onChange={(e) => setMeetLink(e.target.value)} required className="w-full border border-outline-variant rounded-lg p-2 bg-surface-container-lowest text-sm" />
               </div>
-
-              {(() => {
-                const linkedJob = jobs.find(j => j.id === selectedCandidate.job_description_id);
-                return linkedJob ? (
-                  <div className="details-section job-spec-section">
-                    <h4>Target Job Description</h4>
-                    <div className="job-spec-details">
-                      <h5>{linkedJob.title}</h5>
-                      <p className="job-spec-text" style={{ fontSize: '13px', color: 'var(--text-light)', marginTop: '4px' }}>
-                        {linkedJob.description_text}
-                      </p>
-                    </div>
-                  </div>
-                ) : null;
-              })()}
-
-              <div className="score-section">
-                <div className="score-main">
-                  <span className={`score-large ${selectedCandidate.score >= settings.threshold ? 'pass' : 'fail'}`}>
-                    {selectedCandidate.score}
-                  </span>
-                  <div>
-                    <h4>Overall Screener Score</h4>
-                    <span className={`status-pill ${selectedCandidate.status.toLowerCase()}`}>
-                      {selectedCandidate.status}
-                    </span>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-sm text-on-surface-variant mb-1">Calendar URL (Optional)</label>
+                <input type="url" value={calendarLink} onChange={(e) => setCalendarLink(e.target.value)} className="w-full border border-outline-variant rounded-lg p-2 bg-surface-container-lowest text-sm" />
               </div>
-
-              <div className="details-section">
-                <h4>Evaluation Summary & Reason</h4>
-                <p>{selectedCandidate.reason}</p>
+              <div className="flex justify-end gap-2 mt-2">
+                <button type="button" onClick={() => setSchedulingCandidateId(null)} className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-sm font-bold">Cancel</button>
+                <button type="submit" disabled={scheduling} className="bg-secondary text-on-secondary px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">Save</button>
               </div>
-
-              <div className="skills-tags-container">
-                <div className="skills-block">
-                  <h4>Matched Skills</h4>
-                  {selectedCandidate.skills_matched.length > 0 ? (
-                    <div className="skills-grid">
-                      {selectedCandidate.skills_matched.map(s => (
-                        <span key={s} className="pill pill-green">{s}</span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="no-skills">No matched skills identified.</p>
-                  )}
-                </div>
-
-                <div className="skills-block">
-                  <h4>Missing Skills / Suggested Actions</h4>
-                  {selectedCandidate.missing_skills.length > 0 ? (
-                    <div className="skills-grid">
-                      {selectedCandidate.missing_skills.map(s => (
-                        <span key={s} className="pill pill-orange">{s}</span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="no-skills">No missing skills reported.</p>
-                  )}
-                </div>
-              </div>
-
-              {selectedCandidate.status === 'Shortlisted' && (selectedCandidate.meet_link || selectedCandidate.meeting_link) && (
-                <div className="booking-section">
-                  <h4>Interview Schedules</h4>
-                  {selectedCandidate.meet_link && (
-                    <p><strong>Google Meet:</strong> <a href={selectedCandidate.meet_link} target="_blank" rel="noreferrer">{selectedCandidate.meet_link}</a></p>
-                  )}
-                  {selectedCandidate.meeting_link && (
-                    <p><strong>Calendar Event:</strong> <a href={selectedCandidate.meeting_link} target="_blank" rel="noreferrer">Open Invitation Event</a></p>
-                  )}
-                </div>
-              )}
-
-              <div className="resume-text-view">
-                <h4>Extracted Resume Text</h4>
-                <pre>{selectedCandidate.resume_text}</pre>
-              </div>
-            </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TalentFlow AI - Candidate Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#d3e4fe",
+                        "surface-container": "#e5eeff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-secondary-fixed": "#07006c",
+                        "tertiary-fixed-dim": "#89ceff",
+                        "on-surface": "#0b1c30",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#e1e0ff",
+                        "background": "#f8f9ff",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed": "#dae2fd",
+                        "on-background": "#0b1c30",
+                        "outline": "#76777d",
+                        "secondary-fixed-dim": "#c0c1ff",
+                        "on-primary-container": "#7c839b",
+                        "inverse-primary": "#bec6e0",
+                        "tertiary-fixed": "#c9e6ff",
+                        "tertiary-container": "#001e2f",
+                        "outline-variant": "#c6c6cd",
+                        "primary": "#000000",
+                        "surface-bright": "#f8f9ff",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#131b2e",
+                        "secondary-container": "#6063ee",
+                        "secondary": "#4648d4",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-container-high": "#dce9ff",
+                        "inverse-surface": "#213145",
+                        "on-error-container": "#93000a",
+                        "primary-fixed-dim": "#bec6e0",
+                        "on-secondary-container": "#fffbff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-fixed": "#001e2f",
+                        "surface-dim": "#cbdbf5",
+                        "surface-tint": "#565e74",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "on-tertiary-fixed-variant": "#004c6e",
+                        "on-surface-variant": "#45464d",
+                        "tertiary": "#000000",
+                        "surface-container-low": "#eff4ff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-container": "#008cc7",
+                        "surface": "#f8f9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-width": "260px",
+                        "xl": "2.5rem",
+                        "gutter": "24px",
+                        "container-max": "1440px",
+                        "xs": "0.25rem",
+                        "sm": "0.5rem",
+                        "lg": "1.5rem",
+                        "md": "1rem",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-mono": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                        "display-lg": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .ai-glow {
+            box-shadow: 0 0 15px rgba(96, 99, 238, 0.15);
+        }
+        .ambient-shadow {
+            box-shadow: 0 4px 20px rgba(11, 28, 48, 0.04);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full w-sidebar-width bg-primary-container dark:bg-primary-container border-r border-outline-variant flex flex-col py-lg px-md z-20 hidden md:flex">
+<div class="mb-xl px-sm">
+<h1 class="font-headline-md text-headline-md text-on-primary dark:text-primary-fixed font-bold">TalentFlow AI</h1>
+<p class="font-body-sm text-body-sm text-on-primary-container mt-xs">HR Intelligence</p>
+</div>
+<button class="w-full bg-secondary text-on-secondary py-sm px-md rounded-lg font-bold mb-lg hover:bg-secondary-container transition-colors shadow-sm flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined text-sm">upload_file</span>
+            Upload Resumes
+        </button>
+<ul class="flex flex-col gap-xs flex-1">
+<li>
+<a class="flex items-center gap-md px-sm py-sm rounded-lg text-on-primary-container hover:text-on-primary hover:bg-primary-fixed-dim/10 transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-sm py-sm rounded-lg text-on-secondary-container bg-secondary-container rounded-lg font-bold transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="group" style="font-variation-settings: 'FILL' 1;">group</span>
+<span>Candidates</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-sm py-sm rounded-lg text-on-primary-container hover:text-on-primary hover:bg-primary-fixed-dim/10 transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+<span>Jobs</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-sm py-sm rounded-lg text-on-primary-container hover:text-on-primary hover:bg-primary-fixed-dim/10 transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+<span>Schedule</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-sm py-sm rounded-lg text-on-primary-container hover:text-on-primary hover:bg-primary-fixed-dim/10 transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Analytics</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-sm py-sm rounded-lg text-on-primary-container hover:text-on-primary hover:bg-primary-fixed-dim/10 transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</li>
+</ul>
+<div class="mt-auto pt-md border-t border-surface-tint/20 flex items-center gap-md px-sm">
+<img alt="HR Manager Profile" class="w-8 h-8 rounded-full border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_ymO5ki312SUsNnZlkj5CnTR5T-vfGbfrix2HmX0SiCc8f7ohkpealhyFh6cXhmx3csI9BBalfqXoqZgtCtNV4bGiTBrjSrRYpwf6Ga2EWktSxuO3DSiEWwzCuxpZK6joPLbR8Ma5YCZij9lNPxj4F5kpQMUtyGgrRDG5_4sN3L3BlL2DUue0eYSvyKKiRnbdfRhAH32AQDymr_4Q8P8uSC0bVKgiru8wuy2aVC1fpubUFXD76GIUnB0lLHpFqAGeL2BbVPQ1jUc"/>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-primary font-bold">Alex Mercer</span>
+<span class="font-label-mono text-label-mono text-on-primary-container text-[10px]">HR Manager</span>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col md:ml-sidebar-width min-h-screen">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center h-16 px-gutter bg-surface dark:bg-surface border-b border-outline-variant z-10 sticky top-0">
+<div class="flex items-center gap-md md:hidden">
+<button class="p-sm text-on-surface hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<span class="font-headline-md text-headline-md font-bold text-on-surface">TalentFlow AI</span>
+</div>
+<div class="hidden md:flex items-center flex-1">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-full py-sm pl-xl pr-sm font-body-sm text-body-sm text-on-surface focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary transition-all" placeholder="Search candidates..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="p-sm text-on-surface-variant hover:text-primary transition-colors rounded-full hover:bg-surface-variant scale-95 active:scale-90 transition-transform relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full border border-surface"></span>
+</button>
+<button class="p-sm text-on-surface-variant hover:text-primary transition-colors rounded-full hover:bg-surface-variant scale-95 active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-6 w-px bg-outline-variant mx-sm"></div>
+<button class="text-secondary font-bold font-body-sm text-body-sm hover:text-primary transition-colors scale-95 active:scale-90">
+                    Quick Actions
+                </button>
+<img alt="User Avatar" class="w-8 h-8 rounded-full border border-outline-variant ml-sm md:hidden" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCE5ynZb-8UsXg6rDV-xgGrsbEqAjE7mHGPm6TykS_rHEe76RakVJ5Gu4T9ZTdvcLW9GPAR5nAS8zhyFjBzPSUU6NqUPTqpw16_RKlpRgMY3rZVMb1i8j5HNCWDkiHmiIg7qtWTOmjLwsvt8aHIzIFeNERba_kN4CmEdwetXVT8ldQicl2-rZqbM0yDCNh_z7GXlOvjDfsebpqx7hzXLJNmUTkBMWr6xB6NhMoIFhCR6lxjCaqzTIyhepPTgUbr_4Qg5dvlyg_ehrY"/>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 p-gutter max-w-container-max mx-auto w-full flex flex-col gap-lg">
+<!-- Breadcrumb & Actions -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-md">
+<div class="flex items-center gap-sm text-on-surface-variant font-body-sm text-body-sm">
+<a class="hover:text-primary transition-colors" href="#">Candidates</a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-primary font-bold">Sarah Jenkins</span>
+</div>
+<div class="flex items-center gap-sm">
+<button class="px-md py-sm border border-outline text-on-surface font-body-sm text-body-sm rounded-lg hover:bg-surface-variant transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        Resume
+                    </button>
+<button class="px-md py-sm bg-secondary text-on-secondary font-body-sm text-body-sm rounded-lg hover:bg-secondary-container transition-colors flex items-center gap-xs shadow-sm">
+<span class="material-symbols-outlined text-[18px]">event</span>
+                        Schedule Interview
+                    </button>
+</div>
+</div>
+<!-- Hero Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Col: Profile Details & Timeline -->
+<div class="lg:col-span-4 flex flex-col gap-gutter">
+<!-- Profile Card -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg ambient-shadow flex flex-col items-center text-center">
+<div class="relative mb-md">
+<img alt="A professional headshot of a candidate, clear lighting, neutral corporate background." class="w-24 h-24 rounded-full border-4 border-surface shadow-sm object-cover" data-alt="A professional headshot portrait of a female software engineer in her late 20s. She has a confident, approachable expression, wearing a smart-casual dark navy blazer over a crisp white shirt. The background is a softly blurred, modern corporate office environment with bright, natural lighting. The image styling is clean, high-resolution, and perfectly suited for an enterprise HR dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAV4mkvzA5ouDZrGXxEFZg4rQfI4Nl4pVepc6uzl88rKuvYwXkWlxJbP6uZ-p29S9DvrgXVluOBEXtC_akhf0mc4fp3uzlees_VCeyy0PT__2DeXvlrzj3OdFe_TcLLJBHvDs0hekQZCH5q1T8ZXDNP3p6SUVCSxsNUsPQYXZM1dmosMgNdSmLnKBq2rlV4F4cKWJt7drwftBGmXiSJXa9z_sSg5JmxGtFx6mQsX-GsnORLXl7WP5FAZjFPHW00gq8Qr8Kn9agyg20"/>
+<div class="absolute bottom-0 right-0 w-6 h-6 bg-surface-container-high rounded-full border-2 border-surface flex items-center justify-center" title="AI Verified Profile">
+<span class="material-symbols-outlined text-[14px] text-secondary">verified</span>
+</div>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-xs">Sarah Jenkins</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-sm">Senior Frontend Developer</p>
+<div class="flex items-center gap-sm mb-lg">
+<span class="inline-flex items-center gap-xs px-sm py-xs bg-surface-container-low text-on-surface-variant rounded-full font-label-mono text-label-mono text-[10px]">
+<span class="material-symbols-outlined text-[14px]">location_on</span>
+                                Austin, TX (Remote)
+                            </span>
+<span class="inline-flex items-center gap-xs px-sm py-xs bg-surface-container-low text-on-surface-variant rounded-full font-label-mono text-label-mono text-[10px]">
+<span class="material-symbols-outlined text-[14px]">work_history</span>
+                                6 Yrs Exp
+                            </span>
+</div>
+<div class="w-full grid grid-cols-2 gap-sm border-t border-outline-variant pt-md">
+<div class="text-left">
+<span class="block font-label-mono text-label-mono text-on-surface-variant text-[10px] uppercase mb-1">Applied For</span>
+<span class="font-body-sm text-body-sm text-on-surface font-bold">Req #492 - Lead UI Eng</span>
+</div>
+<div class="text-left">
+<span class="block font-label-mono text-label-mono text-on-surface-variant text-[10px] uppercase mb-1">Source</span>
+<span class="font-body-sm text-body-sm text-on-surface font-bold">LinkedIn Direct</span>
+</div>
+<div class="text-left col-span-2 mt-sm">
+<span class="block font-label-mono text-label-mono text-on-surface-variant text-[10px] uppercase mb-1">Contact</span>
+<span class="font-body-sm text-body-sm text-on-surface">sarah.j.dev@email.com</span>
+</div>
+</div>
+</div>
+<!-- Timeline -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg ambient-shadow flex-1">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-md">Interaction History</h3>
+<div class="relative pl-sm border-l-2 border-surface-variant ml-sm space-y-lg mt-md">
+<!-- Event -->
+<div class="relative">
+<div class="absolute -left-[23px] top-1 w-3 h-3 bg-secondary rounded-full border-2 border-surface"></div>
+<div class="pl-md">
+<span class="block font-label-mono text-label-mono text-on-surface-variant text-[10px]">Today, 10:45 AM</span>
+<p class="font-body-sm text-body-sm text-on-surface font-bold mt-xs">AI Screening Completed</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-[12px]">System generated profile breakdown.</p>
+</div>
+</div>
+<!-- Event -->
+<div class="relative">
+<div class="absolute -left-[23px] top-1 w-3 h-3 bg-surface-variant rounded-full border-2 border-surface"></div>
+<div class="pl-md">
+<span class="block font-label-mono text-label-mono text-on-surface-variant text-[10px]">Yesterday, 3:20 PM</span>
+<p class="font-body-sm text-body-sm text-on-surface font-bold mt-xs">Email Sent: Assessment Link</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-[12px]">Automated technical assessment sent.</p>
+</div>
+</div>
+<!-- Event -->
+<div class="relative">
+<div class="absolute -left-[23px] top-1 w-3 h-3 bg-surface-variant rounded-full border-2 border-surface"></div>
+<div class="pl-md">
+<span class="block font-label-mono text-label-mono text-on-surface-variant text-[10px]">Oct 12, 09:00 AM</span>
+<p class="font-body-sm text-body-sm text-on-surface font-bold mt-xs">Application Received</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Col: AI Report & Details -->
+<div class="lg:col-span-8 flex flex-col gap-gutter">
+<!-- AI Screening Report Card -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg ambient-shadow relative overflow-hidden border-t-4 border-t-secondary ai-glow">
+<!-- Decorative bg -->
+<div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-surface-variant/30 to-transparent rounded-bl-full pointer-events-none -z-10"></div>
+<div class="flex items-start justify-between mb-lg">
+<div>
+<div class="flex items-center gap-sm mb-xs">
+<span class="material-symbols-outlined text-secondary">memory</span>
+<h3 class="font-headline-lg text-headline-lg text-on-surface">AI Screening Report</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Generated from resume and GitHub activity.</p>
+</div>
+<!-- Status & Override -->
+<div class="flex flex-col items-end gap-sm">
+<div class="flex items-center gap-sm px-md py-xs bg-surface-container-high rounded-full border border-secondary/20">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-mono text-label-mono text-on-surface font-bold">Strong Match</span>
+</div>
+<div class="flex items-center gap-xs">
+<button class="text-[12px] font-body-sm text-on-surface-variant hover:text-primary transition-colors underline decoration-outline-variant underline-offset-2">Override Status</button>
+</div>
+</div>
+</div>
+<!-- Main Score Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md mb-lg">
+<div class="bg-surface rounded-lg p-md border border-outline-variant flex flex-col justify-center items-center">
+<span class="font-label-mono text-label-mono text-on-surface-variant mb-sm">Overall Fit</span>
+<div class="relative w-20 h-20 flex items-center justify-center">
+<!-- Circular Progress placeholder -->
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-variant" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-secondary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="92, 100" stroke-width="3"></path>
+</svg>
+<span class="absolute font-headline-md text-headline-md font-bold text-on-surface">92<span class="text-[12px]">%</span></span>
+</div>
+</div>
+<div class="md:col-span-2 bg-surface rounded-lg p-md border border-outline-variant">
+<span class="font-label-mono text-label-mono text-on-surface-variant mb-sm block">AI Reasoning Summary</span>
+<p class="font-body-sm text-body-sm text-on-surface leading-relaxed">
+                                    Candidate demonstrates deep expertise in modern frontend architectures, specifically React and TypeScript. Shows a strong trajectory of technical leadership in previous roles. 
+                                    <span class="bg-surface-variant/50 text-on-surface px-1 rounded inline-block mt-1">Significant open-source contributions align well with our required stack.</span>
+</p>
+</div>
+</div>
+<!-- Skills Breakdown -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Matched -->
+<div>
+<h4 class="font-body-sm text-body-sm font-bold text-on-surface mb-sm flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px] text-on-secondary-fixed-variant">check_circle</span>
+                                    Skills Matched
+                                </h4>
+<div class="flex flex-wrap gap-xs">
+<span class="px-sm py-xs bg-surface-container-low border border-outline-variant rounded text-[12px] font-body-sm text-on-surface">React.js</span>
+<span class="px-sm py-xs bg-surface-container-low border border-outline-variant rounded text-[12px] font-body-sm text-on-surface">TypeScript</span>
+<span class="px-sm py-xs bg-surface-container-low border border-outline-variant rounded text-[12px] font-body-sm text-on-surface">Redux</span>
+<span class="px-sm py-xs bg-surface-container-low border border-outline-variant rounded text-[12px] font-body-sm text-on-surface">System Design</span>
+<span class="px-sm py-xs bg-surface-container-low border border-outline-variant rounded text-[12px] font-body-sm text-on-surface">Agile</span>
+</div>
+</div>
+<!-- Missing -->
+<div>
+<h4 class="font-body-sm text-body-sm font-bold text-on-surface mb-sm flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px] text-outline">error</span>
+                                    Missing / Weak Areas
+                                </h4>
+<div class="flex flex-wrap gap-xs">
+<span class="px-sm py-xs bg-surface text-on-surface-variant border border-dashed border-outline-variant rounded text-[12px] font-body-sm">GraphQL</span>
+<span class="px-sm py-xs bg-surface text-on-surface-variant border border-dashed border-outline-variant rounded text-[12px] font-body-sm">Docker (Basic)</span>
+</div>
+<p class="text-[10px] font-label-mono text-outline mt-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">info</span>
+                                    Missing skills are not critical for immediate req.
+                                </p>
+</div>
+</div>
+</div>
+<!-- Experience Details Tabs Placeholder -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-0 ambient-shadow overflow-hidden flex-1 flex flex-col">
+<div class="flex border-b border-outline-variant bg-surface-container-low">
+<button class="px-md py-sm font-body-sm text-body-sm font-bold text-secondary border-b-2 border-secondary bg-surface-container-lowest">Experience</button>
+<button class="px-md py-sm font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50 transition-colors">Education</button>
+<button class="px-md py-sm font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50 transition-colors">Notes</button>
+</div>
+<div class="p-lg flex-1">
+<div class="border-l-2 border-outline-variant pl-md ml-xs space-y-md">
+<div>
+<h4 class="font-body-md text-body-md font-bold text-on-surface">Senior Frontend Engineer</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-xs">TechNova Solutions • 2020 - Present</p>
+<ul class="list-disc list-inside font-body-sm text-body-sm text-on-surface space-y-1 mt-sm ml-sm text-on-surface-variant">
+<li>Led migration of legacy monolith to micro-frontend architecture.</li>
+<li>Mentored 3 junior developers and established code review standards.</li>
+</ul>
+</div>
+<div>
+<h4 class="font-body-md text-body-md font-bold text-on-surface">UI Developer</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-xs">Creative Web Agency • 2017 - 2020</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

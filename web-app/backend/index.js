@@ -8,6 +8,8 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 const { getDb } = require('./db');
+const pdfImgConvert = require('pdf-img-convert');
+const Tesseract = require('tesseract.js');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,10 +25,10 @@ const runSubprocess = (command, args) => {
     const child = spawn(command, args);
     let stdout = '';
     let stderr = '';
-    
+
     child.stdout.on('data', data => { stdout += data; });
     child.stderr.on('data', data => { stderr += data; });
-    
+
     child.on('close', code => {
       if (code === 0) {
         resolve(stdout);
@@ -35,6 +37,23 @@ const runSubprocess = (command, args) => {
       }
     });
   });
+};
+
+// Helper: OCR Extraction
+const extractTextWithOCR = async (pdfBuffer) => {
+  try {
+    const images = await pdfImgConvert.convert(pdfBuffer, { base64: true, scale: 2.0 });
+    let fullText = '';
+    for (let i = 0; i < images.length; i++) {
+      const base64Data = `data:image/png;base64,${images[i]}`;
+      const { data: { text } } = await Tesseract.recognize(base64Data, 'eng');
+      fullText += text + '\n';
+    }
+    return fullText;
+  } catch (error) {
+    console.error('OCR Error:', error);
+    throw error;
+  }
 };
 
 // Route: List Candidates
@@ -80,43 +99,41 @@ app.get('/api/candidates', async (req, res) => {
   }
 });
 
-// Route: Upload Candidate Resume
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+// Route: Delete Candidate
+app.delete('/api/candidates/:id', async (req, res) => {
   try {
-    const { name, email, phone, job_role, job_description_id, threshold } = req.body;
-    const file = req.file;
+    const { id } = req.params;
+    const db = await getDb();
     
-    if (!file) {
-      return res.status(400).json({ detail: 'No file uploaded' });
+    const candidate = await db('dashboard_candidates').where({ id }).first();
+    if (!candidate) {
+      return res.status(404).json({ detail: 'Candidate not found' });
     }
     
-    // 1. Parse text from file
-    let resumeText = '';
-    const filename = file.originalname.toLowerCase();
-    
-    if (filename.endsWith('.txt')) {
-      resumeText = file.buffer.toString('utf-8');
-    } else if (filename.endsWith('.pdf')) {
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        resumeText = pdfData.text;
-      } catch (err) {
-        return res.status(400).json({ detail: 'Failed to parse PDF resume: ' + err.message });
-      }
-    } else {
-      return res.status(400).json({ detail: 'Unsupported file format. Please upload a PDF or TXT file.' });
-    }
-    
-    if (!resumeText.trim()) {
-      return res.status(400).json({ detail: 'Could not extract text from file.' });
+    await db('dashboard_candidates').where({ id }).del();
+    res.json({ success: true, id: parseInt(id, 10) });
+  } catch (err) {
+    console.error('Error deleting candidate:', err);
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// Route: Upload Candidate Resumes (Bulk)
+app.post('/api/upload', upload.array('files'), async (req, res) => {
+  try {
+    const { job_role, job_description_id, threshold } = req.body;
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ detail: 'No files uploaded' });
     }
 
     const db = await getDb();
-    
+
     // Resolve Job Description text if present
     let jobDescriptionText = null;
-    let targetJobRole = job_role;
-    
+    let targetJobRole = job_role || 'General Application';
+
     if (job_description_id) {
       const jobDesc = await db('dashboard_jds').where({ id: parseInt(job_description_id, 10) }).first();
       if (jobDesc) {
@@ -124,103 +141,155 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         targetJobRole = jobDesc.title;
       }
     }
-    
-    // 2. Query Ollama AI Screener
+
     const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://ollama:11434';
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
-    
-    const jdClause = jobDescriptionText ? `\nJob Description Requirements:\n${jobDescriptionText}\n` : '';
-    const prompt = `You are an expert HR recruiter. Evaluate this resume for the role of ${targetJobRole}.${jdClause}
-Score the candidate from 0 to 100 based on:
-- Skills match (40 points)
-- Years of relevant experience (30 points)
+    const targetThreshold = parseInt(threshold, 10) || 65;
+
+    const results = [];
+
+    // Process each file sequentially
+    for (const file of files) {
+      // 1. Parse text from file
+      let resumeText = '';
+      const filename = file.originalname.toLowerCase();
+
+      if (filename.endsWith('.txt')) {
+        resumeText = file.buffer.toString('utf-8');
+      } else if (filename.endsWith('.pdf')) {
+        try {
+          const pdfData = await pdfParse(file.buffer);
+          resumeText = pdfData.text;
+        } catch (err) {
+          console.warn('pdf-parse failed, attempting OCR fallback...', err.message);
+        }
+        
+        if (!resumeText || !resumeText.trim()) {
+          console.log('No text found with standard parse, attempting OCR...');
+          try {
+            resumeText = await extractTextWithOCR(file.buffer);
+          } catch (ocrErr) {
+            results.push({ filename: file.originalname, error: 'Failed to extract text even with OCR: ' + ocrErr.message });
+            continue;
+          }
+        }
+      } else {
+        results.push({ filename: file.originalname, error: 'Unsupported file format. Please upload a PDF or TXT file.' });
+        continue;
+      }
+
+      if (!resumeText || !resumeText.trim()) {
+        results.push({ filename: file.originalname, error: 'Could not extract text from file.' });
+        continue;
+      }
+
+      // 2. Query Ollama AI Screener and Extractor
+      const jdClause = jobDescriptionText ? `\nJob Description Requirements:\n${jobDescriptionText}\n` : '';
+      const prompt = `You are a strict, highly analytical expert HR recruiter. Evaluate this resume for the role of ${targetJobRole}.${jdClause}
+CRITICAL INSTRUCTION: If the candidate completely lacks the primary skills required for the target role (e.g., applying for a MERN stack role with only Python/AI experience), you MUST penalize them heavily and assign a total score of LESS THAN 30. Do not be overly generous just because they have a degree or good communication.
+
+Task 1: Extract the candidate's Name, Email, and Phone Number from the resume. If any is not found, use "Not Provided".
+Task 2: Score the candidate strictly from 0 to 100 based on:
+- Skills match with the target role (50 points)
+- Years of strictly relevant experience (20 points)
 - Education (20 points)
 - Communication quality of resume (10 points)
-Respond ONLY in JSON: { "score": score, "reason": "...", "skills_matched": [...], "missing_skills": [...] }
+
+Respond ONLY in JSON format: { "name": "...", "email": "...", "phone": "...", "score": score, "reason": "...", "skills_matched": [...], "missing_skills": [...] }
 Resume: ${resumeText}`;
 
-    let score = 0;
-    let reason = '';
-    let skillsMatched = [];
-    let missingSkills = [];
-    
-    try {
-      const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt: prompt,
-          stream: false,
-          format: 'json'
-        })
+      let name = 'Unknown Candidate';
+      let email = 'unknown@example.com';
+      let phone = null;
+      let score = 0;
+      let reason = '';
+      let skillsMatched = [];
+      let missingSkills = [];
+
+      try {
+        const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: OLLAMA_MODEL,
+            prompt: prompt,
+            stream: false,
+            format: 'json'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Ollama API responded with status ${response.status}`);
+        }
+
+        const result = await response.json();
+        const responseText = (result.response || '').trim();
+
+        let aiResult = {};
+        if (responseText) {
+          const match = responseText.match(/\{[\s\S]*\}/);
+          aiResult = JSON.parse(match ? match[0] : responseText);
+        }
+
+        name = aiResult.name || 'Unknown Candidate';
+        email = aiResult.email || 'unknown@example.com';
+        phone = aiResult.phone || null;
+
+        score = parseInt(aiResult.score, 10);
+        if (isNaN(score)) score = 0;
+
+        reason = aiResult.reason || '';
+
+        const rawMatched = aiResult.skills_matched || [];
+        if (typeof rawMatched === 'string') {
+          skillsMatched = rawMatched.split(',').map(s => s.trim()).filter(Boolean);
+        } else if (Array.isArray(rawMatched)) {
+          skillsMatched = rawMatched;
+        }
+
+        const rawMissing = aiResult.missing_skills || [];
+        if (typeof rawMissing === 'string') {
+          missingSkills = rawMissing.split(',').map(s => s.trim()).filter(Boolean);
+        } else if (Array.isArray(rawMissing)) {
+          missingSkills = rawMissing;
+        }
+      } catch (err) {
+        reason = `AI screener connection error: ${err.message}`;
+      }
+
+      const status = score >= targetThreshold ? 'Shortlisted' : 'Rejected';
+
+      // 3. Save Candidate record
+      const inserted = await db('dashboard_candidates').insert({
+        name: name,
+        email: email,
+        phone: phone || null,
+        job_role: targetJobRole,
+        job_description_id: job_description_id ? parseInt(job_description_id, 10) : null,
+        resume_text: resumeText,
+        score: score,
+        reason: reason,
+        skills_matched: JSON.stringify(skillsMatched),
+        missing_skills: JSON.stringify(missingSkills),
+        status: status
       });
-      
-      if (!response.ok) {
-        throw new Error(`Ollama API responded with status ${response.status}`);
-      }
-      
-      const result = await response.json();
-      const responseText = (result.response || '').trim();
-      
-      let aiResult = {};
-      if (responseText) {
-        const match = responseText.match(/\{[\s\S]*\}/);
-        aiResult = JSON.parse(match ? match[0] : responseText);
-      }
-      
-      score = parseInt(aiResult.score, 10);
-      if (isNaN(score)) score = 0;
-      
-      reason = aiResult.reason || '';
-      
-      const rawMatched = aiResult.skills_matched || [];
-      if (typeof rawMatched === 'string') {
-        skillsMatched = rawMatched.split(',').map(s => s.trim()).filter(Boolean);
-      } else if (Array.isArray(rawMatched)) {
-        skillsMatched = rawMatched;
-      }
-      
-      const rawMissing = aiResult.missing_skills || [];
-      if (typeof rawMissing === 'string') {
-        missingSkills = rawMissing.split(',').map(s => s.trim()).filter(Boolean);
-      } else if (Array.isArray(rawMissing)) {
-        missingSkills = rawMissing;
-      }
-    } catch (err) {
-      reason = `AI screener connection error: ${err.message}`;
+
+      const candidateId = inserted[0];
+
+      results.push({
+        id: candidateId,
+        name: name,
+        email: email,
+        score: score,
+        status: status,
+        reason: reason,
+        filename: file.originalname
+      });
     }
-    
-    const targetThreshold = parseInt(threshold, 10) || 65;
-    const status = score >= targetThreshold ? 'Shortlisted' : 'Rejected';
-    
-    // 3. Save Candidate record
-    const inserted = await db('dashboard_candidates').insert({
-      name: name,
-      email: email,
-      phone: phone || null,
-      job_role: targetJobRole,
-      job_description_id: job_description_id ? parseInt(job_description_id, 10) : null,
-      resume_text: resumeText,
-      score: score,
-      reason: reason,
-      skills_matched: JSON.stringify(skillsMatched),
-      missing_skills: JSON.stringify(missingSkills),
-      status: status
-    });
-    
-    const candidateId = inserted[0];
-    
-    res.json({
-      id: candidateId,
-      name: name,
-      email: email,
-      score: score,
-      status: status,
-      reason: reason
-    });
+
+    res.json({ success: true, results });
   } catch (err) {
-    console.error('Error uploading candidate:', err);
+    console.error('Error processing bulk upload:', err);
     res.status(500).json({ detail: err.message });
   }
 });
@@ -230,17 +299,17 @@ app.post('/api/candidates/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     if (!['Pending', 'Shortlisted', 'Rejected'].includes(status)) {
       return res.status(400).json({ detail: 'Invalid status option' });
     }
-    
+
     const db = await getDb();
     const candidate = await db('dashboard_candidates').where({ id }).first();
     if (!candidate) {
       return res.status(404).json({ detail: 'Candidate not found' });
     }
-    
+
     await db('dashboard_candidates').where({ id }).update({ status });
     res.json({ id: parseInt(id, 10), status });
   } catch (err) {
@@ -254,18 +323,18 @@ app.post('/api/candidates/:id/meeting', async (req, res) => {
   try {
     const { id } = req.params;
     const { meeting_link, meet_link } = req.body;
-    
+
     const db = await getDb();
     const candidate = await db('dashboard_candidates').where({ id }).first();
     if (!candidate) {
       return res.status(404).json({ detail: 'Candidate not found' });
     }
-    
+
     await db('dashboard_candidates').where({ id }).update({
       meeting_link: meeting_link || null,
       meet_link: meet_link || null
     });
-    
+
     res.json({ id: parseInt(id, 10), meeting_link, meet_link });
   } catch (err) {
     console.error('Error updating meeting links:', err);
@@ -277,14 +346,14 @@ app.post('/api/candidates/:id/meeting', async (req, res) => {
 app.post('/api/report', async (req, res) => {
   let tempJsonPath = null;
   let outputPdf = null;
-  
+
   try {
     const db = await getDb();
     const candidates = await db('dashboard_candidates');
     if (!candidates || candidates.length === 0) {
       return res.status(404).json({ detail: 'No candidates found to generate report' });
     }
-    
+
     // Format candidates list
     const candList = candidates.map(c => {
       let skillsMatched = [];
@@ -303,22 +372,22 @@ app.post('/api/report', async (req, res) => {
         skills_matched: skillsMatched
       };
     });
-    
+
     // Write to temp JSON file
     const uniqueId = Math.random().toString(36).substring(2, 15);
     const tempJsonFilename = `candidates_report_${uniqueId}.json`;
     tempJsonPath = path.join(os.tmpdir(), tempJsonFilename);
     fs.writeFileSync(tempJsonPath, JSON.stringify(candList));
-    
+
     // Resolve generate_report.py path dynamically
     let pythonScript = '/data/python/generate_report.py';
     if (!fs.existsSync(pythonScript)) {
       pythonScript = path.resolve(__dirname, '..', '..', 'python', 'generate_report.py');
     }
-    
+
     const tempPdfFilename = `weekly_report_dashboard_${uniqueId}.pdf`;
     outputPdf = path.join(os.tmpdir(), tempPdfFilename);
-    
+
     // Inside the container, standard python executable is at /opt/venv/bin/python or python3.
     // If not in virtual environment, fallback to standard python3.
     let pythonExecutable = 'python3';
@@ -327,22 +396,22 @@ app.post('/api/report', async (req, res) => {
     } else if (fs.existsSync('/opt/venv/bin/python')) {
       pythonExecutable = '/opt/venv/bin/python';
     }
-    
+
     await runSubprocess(pythonExecutable, [pythonScript, tempJsonPath, outputPdf]);
-    
+
     res.download(outputPdf, 'weekly_candidates_report.pdf', (err) => {
       // Cleanup temp files
-      try { fs.unlinkSync(tempJsonPath); } catch (_) {}
-      try { fs.unlinkSync(outputPdf); } catch (_) {}
+      try { fs.unlinkSync(tempJsonPath); } catch (_) { }
+      try { fs.unlinkSync(outputPdf); } catch (_) { }
     });
   } catch (err) {
     console.error('Error generating report:', err);
     // Cleanup temp files on error
     if (tempJsonPath && fs.existsSync(tempJsonPath)) {
-      try { fs.unlinkSync(tempJsonPath); } catch (_) {}
+      try { fs.unlinkSync(tempJsonPath); } catch (_) { }
     }
     if (outputPdf && fs.existsSync(outputPdf)) {
-      try { fs.unlinkSync(outputPdf); } catch (_) {}
+      try { fs.unlinkSync(outputPdf); } catch (_) { }
     }
     res.status(500).json({ detail: `PDF generation failed: ${err.message}` });
   }
@@ -355,13 +424,13 @@ app.post('/api/jobs', async (req, res) => {
     if (!title || !description_text) {
       return res.status(400).json({ detail: 'Title and description_text are required' });
     }
-    
+
     const db = await getDb();
     const inserted = await db('dashboard_jds').insert({
       title,
       description_text
     });
-    
+
     const jobId = inserted[0];
     res.json({ id: jobId, title });
   } catch (err) {
@@ -391,14 +460,14 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
   try {
     const { job_description } = req.body;
     const file = req.file;
-    
+
     if (!file) {
       return res.status(400).json({ detail: 'No file uploaded' });
     }
-    
+
     let resumeText = '';
     const filename = file.originalname.toLowerCase();
-    
+
     if (filename.endsWith('.txt')) {
       resumeText = file.buffer.toString('utf-8');
     } else if (filename.endsWith('.pdf')) {
@@ -406,19 +475,28 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
         const pdfData = await pdfParse(file.buffer);
         resumeText = pdfData.text;
       } catch (err) {
-        return res.status(400).json({ detail: 'Failed to parse PDF resume: ' + err.message });
+        console.warn('pdf-parse failed, attempting OCR fallback...', err.message);
+      }
+
+      if (!resumeText || !resumeText.trim()) {
+        console.log('No text found with standard parse, attempting OCR...');
+        try {
+          resumeText = await extractTextWithOCR(file.buffer);
+        } catch (ocrErr) {
+          return res.status(400).json({ detail: 'Failed to extract text even with OCR: ' + ocrErr.message });
+        }
       }
     } else {
       return res.status(400).json({ detail: 'Unsupported file format. Please upload a PDF or TXT file.' });
     }
-    
-    if (!resumeText.trim()) {
+
+    if (!resumeText || !resumeText.trim()) {
       return res.status(400).json({ detail: 'Could not extract text from file.' });
     }
-    
+
     const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://ollama:11434';
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
-    
+
     const prompt = `
     You are an ATS (Applicant Tracking System). Compare this resume against the job description.
     
@@ -433,14 +511,14 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
     Job Description: ${job_description}
     Resume: ${resumeText}
     `;
-    
+
     let atsResult = {
       ats_score: 0,
       matched_keywords: [],
       missing_keywords: [],
       match_summary: 'No match summary generated.'
     };
-    
+
     try {
       const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
         method: 'POST',
@@ -452,18 +530,18 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
           format: 'json'
         })
       });
-      
+
       if (!response.ok) {
         throw new Error(`Ollama API responded with status ${response.status}`);
       }
-      
+
       const result = await response.json();
       const responseText = (result.response || '').trim();
-      
+
       if (responseText) {
         const match = responseText.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(match ? match[0] : responseText);
-        
+
         atsResult.ats_score = parseInt(parsed.ats_score, 10) || 0;
         atsResult.matched_keywords = Array.isArray(parsed.matched_keywords) ? parsed.matched_keywords : [];
         atsResult.missing_keywords = Array.isArray(parsed.missing_keywords) ? parsed.missing_keywords : [];
@@ -472,7 +550,7 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
     } catch (err) {
       atsResult.match_summary = `ATS evaluation error: ${err.message}`;
     }
-    
+
     res.json(atsResult);
   } catch (err) {
     console.error('Error in ATS check:', err);

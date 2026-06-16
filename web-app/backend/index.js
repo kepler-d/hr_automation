@@ -144,7 +144,6 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
     }
 
     const targetThreshold = parseInt(threshold, 10) || 65;
-    const targetThreshold = parseInt(threshold, 10) || 65;
 
     const results = [];
 

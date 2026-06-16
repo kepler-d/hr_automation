@@ -189,10 +189,12 @@ CRITICAL INSTRUCTION: If the candidate completely lacks the primary skills requi
 
 Task 1: Extract the candidate's Name, Email, and Phone Number from the resume. If any is not found, use "Not Provided".
 Task 2: Score the candidate strictly from 0 to 100 based on:
-- Skills match with the target role (50 points)
-- Years of strictly relevant experience (20 points)
+- Skills match with the target role (50 points) -> DEDUCT AT LEAST 5 TO 10 POINTS FOR **EACH** MISSING SKILL MENTIONED IN THE JOB DESCRIPTION OR MISSING CORE SKILLS.
+- Years of strictly relevant experience (20 points) -> Zero points if they have no relevant experience.
 - Education (20 points)
 - Communication quality of resume (10 points)
+
+Be brutal and realistic. A candidate missing 3-4 preferred skills should NEVER score above 75.
 
 Respond ONLY in JSON format: { "name": "...", "email": "...", "phone": "...", "score": score, "reason": "...", "skills_matched": [...], "missing_skills": [...] }
 Resume: ${resumeText}`;

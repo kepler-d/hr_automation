@@ -207,48 +207,60 @@ Resume: ${resumeText}`;
       let skillsMatched = [];
       let missingSkills = [];
 
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-            }
-        });
+      let retries = 3;
+      let delay = 2000;
+      while (retries > 0) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+              config: {
+                  responseMimeType: "application/json",
+              }
+          });
 
-        const responseText = response.text || '';
-        let aiResult = {};
-        if (responseText) {
-          const match = responseText.match(/\{[\s\S]*\}/);
-          aiResult = JSON.parse(match ? match[0] : responseText);
+          const responseText = response.text || '';
+          let aiResult = {};
+          if (responseText) {
+            const match = responseText.match(/\{[\s\S]*\}/);
+            aiResult = JSON.parse(match ? match[0] : responseText);
+          }
+
+          name = aiResult.name || 'Unknown Candidate';
+          email = aiResult.email || 'unknown@example.com';
+          phone = aiResult.phone || null;
+
+          score = parseInt(aiResult.score, 10);
+          if (isNaN(score)) score = 0;
+
+          reason = aiResult.reason || '';
+
+          const rawMatched = aiResult.skills_matched || [];
+          if (typeof rawMatched === 'string') {
+            skillsMatched = rawMatched.split(',').map(s => s.trim()).filter(Boolean);
+          } else if (Array.isArray(rawMatched)) {
+            skillsMatched = rawMatched;
+          }
+
+          const rawMissing = aiResult.missing_skills || [];
+          if (typeof rawMissing === 'string') {
+            missingSkills = rawMissing.split(',').map(s => s.trim()).filter(Boolean);
+          } else if (Array.isArray(rawMissing)) {
+            missingSkills = rawMissing;
+          }
+          break; // Exit loop on success
+        } catch (err) {
+          retries--;
+          if (retries === 0) {
+            reason = `AI screener connection error: ${err.message}`;
+            console.error("Gemini Upload Error:", err);
+          } else {
+            console.warn(`Gemini API error (503/429). Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // Exponential backoff
+          }
         }
-
-        name = aiResult.name || 'Unknown Candidate';
-        email = aiResult.email || 'unknown@example.com';
-        phone = aiResult.phone || null;
-
-        score = parseInt(aiResult.score, 10);
-        if (isNaN(score)) score = 0;
-
-        reason = aiResult.reason || '';
-
-        const rawMatched = aiResult.skills_matched || [];
-        if (typeof rawMatched === 'string') {
-          skillsMatched = rawMatched.split(',').map(s => s.trim()).filter(Boolean);
-        } else if (Array.isArray(rawMatched)) {
-          skillsMatched = rawMatched;
-        }
-
-        const rawMissing = aiResult.missing_skills || [];
-        if (typeof rawMissing === 'string') {
-          missingSkills = rawMissing.split(',').map(s => s.trim()).filter(Boolean);
-        } else if (Array.isArray(rawMissing)) {
-          missingSkills = rawMissing;
-        }
-      } catch (err) {
-        reason = `AI screener connection error: ${err.message}`;
-        console.error("Gemini Upload Error:", err);
       }
 
       const status = score >= targetThreshold ? 'Shortlisted' : 'Rejected';

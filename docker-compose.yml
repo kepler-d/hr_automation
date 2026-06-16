@@ -43,24 +43,6 @@ services:
       postgres:
         condition: service_healthy
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: hr-ollama
-    restart: always
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
-  ollama-pull-model:
-    image: ollama/ollama:latest
-    container_name: hr-ollama-pull-model
-    environment:
-      - OLLAMA_HOST=ollama:11434
-    entrypoint: [ "sh", "-c", "sleep 10 && ollama pull llama3" ]
-    depends_on:
-      - ollama
-
   web-backend:
     build:
       context: ./web-app/backend
@@ -71,14 +53,12 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - OLLAMA_API_URL=http://ollama:11434
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - ./python:/data/python
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_started
 
   web-frontend:
     build:

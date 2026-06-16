@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { GoogleGenAI } = require('@google/genai');
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -142,8 +143,7 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
       }
     }
 
-    const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://ollama:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
+    const targetThreshold = parseInt(threshold, 10) || 65;
     const targetThreshold = parseInt(threshold, 10) || 65;
 
     const results = [];
@@ -207,24 +207,16 @@ Resume: ${resumeText}`;
       let missingSkills = [];
 
       try {
-        const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: OLLAMA_MODEL,
-            prompt: prompt,
-            stream: false,
-            format: 'json'
-          })
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+            }
         });
 
-        if (!response.ok) {
-          throw new Error(`Ollama API responded with status ${response.status}`);
-        }
-
-        const result = await response.json();
-        const responseText = (result.response || '').trim();
-
+        const responseText = response.text || '';
         let aiResult = {};
         if (responseText) {
           const match = responseText.match(/\{[\s\S]*\}/);
@@ -255,6 +247,7 @@ Resume: ${resumeText}`;
         }
       } catch (err) {
         reason = `AI screener connection error: ${err.message}`;
+        console.error("Gemini Upload Error:", err);
       }
 
       const status = score >= targetThreshold ? 'Shortlisted' : 'Rejected';
@@ -494,9 +487,6 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
       return res.status(400).json({ detail: 'Could not extract text from file.' });
     }
 
-    const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://ollama:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
-
     const prompt = `
     You are an ATS (Applicant Tracking System). Compare this resume against the job description.
     
@@ -520,35 +510,29 @@ app.post('/api/ats-check', upload.single('file'), async (req, res) => {
     };
 
     try {
-      const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt: prompt,
-          stream: false,
-          format: 'json'
-        })
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+              responseMimeType: "application/json",
+          }
       });
 
-      if (!response.ok) {
-        throw new Error(`Ollama API responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
-      const responseText = (result.response || '').trim();
-
+      const responseText = response.text || '';
       if (responseText) {
         const match = responseText.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(match ? match[0] : responseText);
-
-        atsResult.ats_score = parseInt(parsed.ats_score, 10) || 0;
-        atsResult.matched_keywords = Array.isArray(parsed.matched_keywords) ? parsed.matched_keywords : [];
-        atsResult.missing_keywords = Array.isArray(parsed.missing_keywords) ? parsed.missing_keywords : [];
-        atsResult.match_summary = parsed.match_summary || 'No match summary generated.';
+        atsResult = {
+          ats_score: parseInt(parsed.ats_score, 10) || 0,
+          matched_keywords: parsed.matched_keywords || [],
+          missing_keywords: parsed.missing_keywords || [],
+          match_summary: parsed.match_summary || 'Analysis complete.'
+        };
       }
     } catch (err) {
-      atsResult.match_summary = `ATS evaluation error: ${err.message}`;
+      console.error("Gemini ATS Check Error:", err);
+      return res.status(500).json({ detail: 'AI analysis failed: ' + err.message });
     }
 
     res.json(atsResult);

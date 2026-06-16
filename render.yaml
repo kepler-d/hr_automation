@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: hr-automation-backend
+    env: node
+    rootDir: web-app/backend
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PORT
+        value: "8000"

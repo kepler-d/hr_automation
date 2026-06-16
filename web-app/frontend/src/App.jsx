@@ -110,7 +110,11 @@ function App() {
       const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: formData });
       if (res.ok) {
         const data = await res.json();
-        setUploadMessage(`Finished! Successfully processed ${data.results.length} out of ${files.length} resume(s).`);
+        const errors = data.results.filter(r => r.error);
+        if (errors.length > 0) {
+          setUploadError(`Warning: ${errors.length} file(s) failed to parse (e.g. ${errors[0].filename}: ${errors[0].error})`);
+        }
+        setUploadMessage(`Finished! Successfully saved ${data.results.length - errors.length} out of ${files.length} resume(s).`);
         fetchCandidates();
       } else {
         const errData = await res.json();

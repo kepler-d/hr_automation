@@ -266,9 +266,9 @@ Resume: ${resumeText}`;
         skills_matched: JSON.stringify(skillsMatched),
         missing_skills: JSON.stringify(missingSkills),
         status: status
-      });
+      }).returning('id');
 
-      const candidateId = inserted[0];
+      const candidateId = typeof inserted[0] === 'object' ? inserted[0].id : inserted[0];
 
       results.push({
         id: candidateId,

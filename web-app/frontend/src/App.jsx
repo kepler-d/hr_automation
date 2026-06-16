@@ -96,33 +96,30 @@ function App() {
     
     setUploading(true);
     setUploadError(null);
-    setUploadMessage(null);
+    setUploadMessage(`Analyzing ${files.length} resume(s)...`);
     
-    let successCount = 0;
-    
+    const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
-      setUploadMessage(`Analyzing resume ${i + 1} of ${files.length}...`);
-      
-      const formData = new FormData();
       formData.append('files', files[i]);
-      formData.append('job_role', jobRole);
-      formData.append('threshold', settings.threshold);
-      if (selectedJobId) { formData.append('job_description_id', selectedJobId); }
-      
-      try {
-        const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: formData });
-        if (res.ok) {
-          successCount++;
-          fetchCandidates(); // Refresh list after each candidate finishes
-        } else {
-          console.error(`Failed to process file ${files[i].name}`);
-        }
-      } catch (err) {
-        console.error(`Network error for file ${files[i].name}:`, err);
+    }
+    formData.append('job_role', jobRole);
+    formData.append('threshold', settings.threshold);
+    if (selectedJobId) { formData.append('job_description_id', selectedJobId); }
+    
+    try {
+      const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        setUploadMessage(`Finished! Successfully processed ${data.results.length} out of ${files.length} resume(s).`);
+        fetchCandidates();
+      } else {
+        const errData = await res.json();
+        setUploadError(`Failed to process resumes: ${errData.detail || 'Unknown error'}`);
       }
+    } catch (err) {
+      setUploadError(`Network error: ${err.message}`);
     }
     
-    setUploadMessage(`Finished! Processed ${successCount} out of ${files.length} resume(s).`);
     setUploading(false);
     
     setFiles([]); setSelectedJobId('');

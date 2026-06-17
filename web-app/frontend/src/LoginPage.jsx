@@ -12,6 +12,16 @@ const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // --- DEMO ACCOUNT BYPASS ---
+    if (email === 'demo@talentflow.ai' && password === 'admin123') {
+      localStorage.setItem('auth_token', 'demo_session_token');
+      localStorage.setItem('auth_user', JSON.stringify({ id: 999, name: 'Demo Admin', email }));
+      navigate('/dashboard');
+      return;
+    }
+    // ---------------------------
+
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const res = await fetch(`${API_URL}/api/auth/login`, {

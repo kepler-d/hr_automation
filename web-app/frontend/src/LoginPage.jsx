@@ -33,12 +33,12 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-on-background flex items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen w-full bg-background text-on-background flex items-center justify-center p-6 relative overflow-hidden">
       {/* Decorative Background */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#8b5cf6] blur-[150px] opacity-20 pointer-events-none"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary blur-[150px] opacity-20 pointer-events-none"></div>
 
-      <div className="w-full max-w-md bg-surface-container-lowest border border-outline-variant/50 rounded-3xl p-8 ambient-shadow relative z-10">
+      <div className="w-full min-w-[320px] sm:min-w-[400px] max-w-md bg-surface-container-lowest border border-outline-variant/50 rounded-3xl p-8 ambient-shadow relative z-10">
         <div className="flex flex-col items-center mb-8">
           <div className="w-12 h-12 bg-gradient-to-br from-secondary to-[#8b5cf6] rounded-xl flex items-center justify-center mb-4 ambient-shadow">
             <span className="material-symbols-outlined text-white text-[28px]">troubleshoot</span>

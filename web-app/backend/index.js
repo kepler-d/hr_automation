@@ -277,8 +277,8 @@ Resume: ${resumeText}`;
       let skillsMatched = [];
       let missingSkills = [];
 
-      let retries = 3;
-      let delay = 2000;
+      let retries = 5;
+      let delay = 5000;
       while (retries > 0) {
         try {
           const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -361,6 +361,9 @@ Resume: ${resumeText}`;
         reason: reason,
         filename: file.originalname
       });
+
+      // Sleep for 4 seconds to respect the 15 RPM free tier rate limit
+      await new Promise(resolve => setTimeout(resolve, 4000));
     }
 
     res.json({ success: true, results });

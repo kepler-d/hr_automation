@@ -23,7 +23,7 @@ const LandingPage = () => {
         </div>
         <div>
           <button 
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/login')}
             className="hidden sm:inline-flex items-center justify-center px-6 py-2 border border-outline-variant rounded-full text-on-surface hover:bg-surface-container hover:border-secondary transition-all duration-300 font-medium"
           >
             Sign In
@@ -52,12 +52,12 @@ const LandingPage = () => {
 
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <button 
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/login')}
             className="group relative inline-flex items-center justify-center px-8 py-4 bg-secondary text-on-secondary font-bold rounded-full overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(46,196,182,0.3)] hover:shadow-[0_0_60px_rgba(46,196,182,0.5)]"
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
             <span className="relative flex items-center gap-2 text-lg">
-              Go to Dashboard
+              Get Started
               <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
             </span>
           </button>

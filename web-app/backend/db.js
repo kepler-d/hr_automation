@@ -80,6 +80,8 @@ async function initializeSchema(knexInstance) {
       table.string('meet_link').nullable();
       table.timestamp('timestamp').defaultTo(knexInstance.fn.now());
     });
+  }
+
   // users table for authentication
   const hasUsersTable = await knexInstance.schema.hasTable('users');
   if (!hasUsersTable) {

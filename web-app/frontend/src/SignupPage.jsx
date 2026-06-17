@@ -6,11 +6,31 @@ const SignupPage = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Placeholder for actual authentication/registration
-    navigate('/dashboard');
+    setLoading(true);
+    setError(null);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Registration failed');
+      
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('auth_user', JSON.stringify(data.user));
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -75,11 +95,14 @@ const SignupPage = () => {
             </div>
           </div>
 
+          {error && <div className="text-error text-sm bg-error-container p-3 rounded-xl border border-error/20">{error}</div>}
+
           <button 
             type="submit"
-            className="w-full bg-gradient-to-r from-[#8b5cf6] to-secondary text-white font-bold py-3 rounded-xl hover:opacity-90 transition-opacity shadow-[0_4px_14px_0_rgba(46,196,182,0.39)] mt-2"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-[#8b5cf6] to-secondary text-white font-bold py-3 rounded-xl hover:opacity-90 transition-opacity shadow-[0_4px_14px_0_rgba(46,196,182,0.39)] mt-2 disabled:opacity-50"
           >
-            Create Account
+            {loading ? 'Creating Account...' : 'Create Account'}
           </button>
         </form>
 

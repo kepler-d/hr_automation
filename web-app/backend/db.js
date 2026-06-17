@@ -80,6 +80,17 @@ async function initializeSchema(knexInstance) {
       table.string('meet_link').nullable();
       table.timestamp('timestamp').defaultTo(knexInstance.fn.now());
     });
+  // users table for authentication
+  const hasUsersTable = await knexInstance.schema.hasTable('users');
+  if (!hasUsersTable) {
+    console.log('Creating table users...');
+    await knexInstance.schema.createTable('users', table => {
+      table.increments('id').primary();
+      table.string('name').notNullable();
+      table.string('email').notNullable().unique().index();
+      table.string('password_hash').notNullable();
+      table.timestamp('timestamp').defaultTo(knexInstance.fn.now());
+    });
   }
 }
 

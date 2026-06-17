@@ -12,6 +12,8 @@ const { getDb } = require('./db');
 const pdfImgConvert = require('pdf-img-convert');
 const Tesseract = require('tesseract.js');
 const PDFDocument = require('pdfkit-table');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -57,6 +59,73 @@ const extractTextWithOCR = async (pdfBuffer) => {
     throw error;
   }
 };
+
+// --- AUTHENTICATION ROUTES ---
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_development';
+
+// Route: Sign Up
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ detail: 'Name, email, and password are required' });
+    }
+
+    const db = await getDb();
+    
+    // Check if user exists
+    const existingUser = await db('users').where({ email }).first();
+    if (existingUser) {
+      return res.status(400).json({ detail: 'Email already in use' });
+    }
+
+    const password_hash = await bcrypt.hash(password, 10);
+    const inserted = await db('users').insert({
+      name,
+      email,
+      password_hash
+    }).returning('id');
+
+    const userId = typeof inserted[0] === 'object' ? inserted[0].id : inserted[0];
+    
+    const token = jwt.sign({ id: userId, email }, JWT_SECRET, { expiresIn: '7d' });
+    
+    res.json({ token, user: { id: userId, name, email } });
+  } catch (err) {
+    console.error('Signup Error:', err);
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// Route: Log In
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ detail: 'Email and password are required' });
+    }
+
+    const db = await getDb();
+    const user = await db('users').where({ email }).first();
+    
+    if (!user) {
+      return res.status(401).json({ detail: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ detail: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+  } catch (err) {
+    console.error('Login Error:', err);
+    res.status(500).json({ detail: err.message });
+  }
+});
 
 // Route: List Candidates
 app.get('/api/candidates', async (req, res) => {

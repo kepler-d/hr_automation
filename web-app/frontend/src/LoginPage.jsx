@@ -67,6 +67,15 @@ const LoginPage = () => {
           <p className="text-on-surface-variant text-sm mt-2">Sign in to TalentFlow AI to continue.</p>
         </div>
 
+        {/* Demo Credentials Box for Reviewers */}
+        <div className="mb-6 p-4 bg-secondary/10 border border-secondary/20 rounded-xl text-center">
+          <p className="text-xs text-secondary font-bold uppercase tracking-wider mb-2">Demo Account For Reviewers</p>
+          <div className="flex flex-col gap-1 text-sm text-on-surface">
+            <div><span className="text-on-surface-variant">Email:</span> <span className="font-mono font-bold">demo@talentflow.ai</span></div>
+            <div><span className="text-on-surface-variant">Password:</span> <span className="font-mono font-bold">admin123</span></div>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div>
             <label className="block text-sm font-medium text-on-surface mb-1">Email Address</label>

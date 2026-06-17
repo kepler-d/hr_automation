@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   
   const [candidates, setCandidates] = useState([]);
@@ -263,6 +265,12 @@ function Dashboard() {
   const averageScore = totalCount > 0 ? (candidates.reduce((sum, c) => sum + c.score, 0) / totalCount).toFixed(1) : '0.0';
   const activeJobsCount = jobs.length;
 
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    navigate('/login');
+  };
+
   const filteredCandidates = candidates.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'All' || c.job_role === roleFilter;
@@ -361,6 +369,9 @@ function Dashboard() {
             </button>
             <button className="hidden sm:flex items-center text-secondary font-body-md text-body-md font-semibold hover:bg-surface-container-low px-2 py-1 rounded-md transition-colors" onClick={handleDownloadReport}>
               <span className="material-symbols-outlined mr-1 text-[18px]">download</span> Export Report
+            </button>
+            <button className="flex items-center text-error font-body-md text-body-md font-semibold hover:bg-error/10 px-2 py-1 rounded-md transition-colors" onClick={handleLogout}>
+              <span className="material-symbols-outlined mr-1 text-[18px]">logout</span> Logout
             </button>
           </div>
         </header>

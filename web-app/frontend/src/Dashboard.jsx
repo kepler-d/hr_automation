@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ThemeToggle from './ThemeToggle';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -364,6 +365,7 @@ function Dashboard() {
             />
           </div>
           <div className="flex items-center space-x-4">
+            <ThemeToggle />
             <button className="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-low">
               <span className="material-symbols-outlined">notifications</span>
             </button>

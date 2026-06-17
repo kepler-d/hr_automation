@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import ThemeToggle from './ThemeToggle';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -57,6 +58,11 @@ const LoginPage = () => {
       {/* Decorative Background */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#8b5cf6] blur-[150px] opacity-20 pointer-events-none"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary blur-[150px] opacity-20 pointer-events-none"></div>
+
+      {/* Theme Toggle */}
+      <div className="absolute top-6 right-6 z-20">
+        <ThemeToggle />
+      </div>
 
       <div className="w-full min-w-[320px] sm:min-w-[400px] max-w-md bg-surface-container-lowest border border-outline-variant/50 rounded-3xl p-8 ambient-shadow relative z-10">
         <div className="flex flex-col items-center mb-8">

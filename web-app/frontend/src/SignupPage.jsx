@@ -20,8 +20,16 @@ const SignupPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Registration failed');
+      
+      let data;
+      try {
+        const text = await res.text();
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error('Server unreachable or returned invalid response.');
+      }
+
+      if (!res.ok) throw new Error(data?.detail || 'Registration failed');
       
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('auth_user', JSON.stringify(data.user));

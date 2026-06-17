@@ -19,8 +19,18 @@ const LoginPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Login failed');
+      
+      let data;
+      try {
+        const text = await res.text();
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error('Incorrect email or password');
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.detail === 'Invalid credentials' ? 'Incorrect email or password' : (data?.detail || 'Login failed'));
+      }
       
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('auth_user', JSON.stringify(data.user));
